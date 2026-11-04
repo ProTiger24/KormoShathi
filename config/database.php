@@ -1,19 +1,11 @@
 <?php
 class Database {
-    private $host;
-    private $port;
-    private $db_name;
-    private $username;
-    private $password;
+    private $host = '127.0.0.1';
+    private $port = '3306';
+    private $db_name = 'kormoshathi';
+    private $username = 'root';
+    private $password = 'Abdul123'; // পাসওয়ার্ড থেকে ! চিহ্ন বাদ দেওয়া হয়েছে
     public $conn;
-
-    public function __construct() {
-        $this->host = getenv('DB_HOST') ?? 'localhost';
-        $this->port = getenv('DB_PORT') ?? 3306;
-        $this->db_name = getenv('DB_NAME') ?? 'kormoshathi';
-        $this->username = getenv('DB_USER') ?? 'root';
-        $this->password = getenv('DB_PASS') ?? '';
-    }
 
     public function getConnection() {
         $this->conn = null;
@@ -26,6 +18,8 @@ class Database {
             $this->conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
         } catch(PDOException $e) {
             error_log("Connection Error: " . $e->getMessage());
+            // ডিবাগ করার জন্য সরাসরি এরর দেখাবে
+            die("Database Connection Failed: " . $e->getMessage()); 
         }
         return $this->conn;
     }

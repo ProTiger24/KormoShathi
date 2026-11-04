@@ -1,634 +1,1041 @@
 <?php
 session_start();
-if (!isset($_SESSION['user_id']) || $_SESSION['user_type'] !== 'employee') {
+
+if (
+    !isset($_SESSION['user_id']) ||
+    ($_SESSION['user_type'] ?? '') !== 'employee'
+) {
     header('Location: login.php');
     exit;
 }
 
-// Get profile picture from database
 require_once 'config/database.php';
+
+date_default_timezone_set('Asia/Dhaka');
+
 $database = new Database();
 $db = $database->getConnection();
-$stmt = $db->prepare("SELECT profile_picture FROM users WHERE id = :id");
-$stmt->bindParam(':id', $_SESSION['user_id']);
-$stmt->execute();
-$user = $stmt->fetch(PDO::FETCH_ASSOC);
-if ($user && $user['profile_picture']) {
-    $_SESSION['profile_picture'] = $user['profile_picture'];
-}
 
-// Get unread notifications count for badge
-$stmt = $db->prepare("SELECT COUNT(*) as unread FROM notifications WHERE user_id = ? AND is_read = 0");
-$stmt->execute([$_SESSION['user_id']]);
-$unread_count = $stmt->fetch(PDO::FETCH_ASSOC)['unread'];
+$userId = $_SESSION['user_id'];
+
+// Fetch User Info
+$stmt = $db->prepare("SELECT first_name, last_name, profile_picture, position, department, employee_id FROM users WHERE id = :id");
+$stmt->execute([':id' => $userId]);
+$user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+$firstName = $_SESSION['first_name'] ?? ($user['first_name'] ?? 'Employee');
+$lastName = $_SESSION['last_name'] ?? ($user['last_name'] ?? '');
+$fullName = trim($firstName . ' ' . $lastName);
+$initials = strtoupper(substr($firstName, 0, 1) . substr($lastName, 0, 1));
+$pic = $_SESSION['profile_picture'] ?? ($user['profile_picture'] ?? '');
+$position = $user['position'] ?? 'Employee';
+$department = $user['department'] ?? 'N/A';
+$employeeId = $user['employee_id'] ?? 'N/A';
+
+$isUrl = !empty($pic) && (strpos($pic, 'http://') === 0 || strpos($pic, 'https://') === 0);
+$isLocal = !empty($pic) && !$isUrl && file_exists(__DIR__ . '/' . $pic);
+$profileImage = '';
+if ($isUrl) { $profileImage = $pic; } 
+elseif ($isLocal) { $profileImage = '/' . trim($pic, '/'); }
+
+// Unread Notifications
+$stmt = $db->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
+$stmt->execute([$userId]);
+$unread_count = (int) $stmt->fetchColumn();
+
+// Quick Stats (Pending Submissions)
+$stmt = $db->prepare("SELECT COUNT(*) FROM employee_submissions WHERE employee_id = ? AND status = 'pending'");
+$stmt->execute([$userId]);
+$pending_tasks = (int) $stmt->fetchColumn();
+
+function e($value) { return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8'); }
 ?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Employee Dashboard - KormoShathi</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <title>Employee Dashboard | KormoShathi</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; }
-        .navbar { background: linear-gradient(135deg, #2c5aa0 0%, #1e3d72 100%); padding: 1rem 2rem; color: white; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
-        .navbar a { color: white; text-decoration: none; }
-        .btn-outline-light { background: transparent; border: 1px solid white; padding: 8px 16px; border-radius: 8px; transition: 0.3s; }
-        .btn-outline-light:hover { background: white; color: #2c5aa0; }
-        .btn-danger { background: #dc3545; border: none; padding: 8px 16px; border-radius: 8px; }
-        .btn-danger:hover { background: #c82333; }
-        .btn-outline-success { background: transparent; border: 1px solid #28a745; color: #28a745; }
-        .btn-outline-success:hover { background: #28a745; color: white; }
-        .container { max-width: 1200px; margin: 2rem auto; padding: 0 20px; }
-        .profile-card { background: white; border-radius: 15px; padding: 25px; text-align: center; box-shadow: 0 5px 15px rgba(0,0,0,0.1); margin-bottom: 20px; }
-        .avatar { width: 100px; height: 100px; border-radius: 50%; object-fit: cover; margin: 0 auto 15px; display: block; }
-        .avatar-placeholder { width: 100px; height: 100px; background: linear-gradient(135deg, #2c5aa0 0%, #1e3d72 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 40px; font-weight: bold; color: white; margin: 0 auto 15px; }
-        .stat-card { background: white; border-radius: 15px; padding: 20px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); margin-bottom: 20px; }
-        .bg-success { background: linear-gradient(135deg, #28a745, #20c997); }
-        .bg-info { background: linear-gradient(135deg, #17a2b8, #0dcaf0); }
-        .text-white { color: white; }
-        .btn-attendance { padding: 12px 30px; font-size: 16px; border-radius: 50px; margin: 10px; border: none; cursor: pointer; transition: 0.3s; }
-        .btn-attendance:hover { transform: scale(1.05); }
-        .fingerprint {
-            width: 100px;
-            height: 100px;
-            background: linear-gradient(135deg, #2c5aa0 0%, #1e3d72 100%);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin: 20px auto 0;
-            cursor: pointer;
-            color: white;
-            font-size: 40px;
-            transition: 0.3s;
-            border: 4px solid transparent;
+        :root {
+            --navy: #14243a;
+            --primary: #356df3;
+            --primary-soft: #edf3ff;
+            --ink: #17263c;
+            --muted: #7b8798;
+            --line: #e9edf3;
+            --surface: #ffffff;
+            --page: #f5f7fb;
+            --green: #10b981;
+            --orange: #f59e0b;
+            --purple: #8b5cf6;
+            --red: #ef4444;
+            --sidebar-width: 270px;
+            --shadow: 0 8px 26px rgba(26, 43, 70, .045);
         }
-        .fingerprint:hover { transform: scale(1.1); border-color: #28a745; }
-        .scanning { animation: pulse 1s infinite; border-color: #ffc107; }
-        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
-        .row { display: flex; flex-wrap: wrap; gap: 20px; }
-        .col-4 { flex: 0 0 calc(33.33% - 20px); }
-        .col-8 { flex: 0 0 calc(66.66% - 20px); }
-        .col-6 { flex: 0 0 calc(50% - 20px); }
-        @media (max-width: 768px) { .col-4, .col-8, .col-6 { flex: 0 0 100%; } }
-        .me-2 { margin-right: 10px; }
-        .me-1 { margin-right: 5px; }
-        .mt-2 { margin-top: 10px; }
-        .mt-3 { margin-top: 15px; }
-        .btn-sm { padding: 5px 10px; font-size: 12px; }
-        .btn-outline-primary { background: transparent; border: 1px solid #2c5aa0; color: #2c5aa0; }
-        .btn-outline-primary:hover { background: #2c5aa0; color: white; }
-        .text-muted { color: #6c757d; }
-        .notification-badge { 
-            position: absolute;
-            top: -8px;
-            right: -8px;
-            font-size: 11px;
-            padding: 3px 7px;
-            border-radius: 50%;
-            background: #dc3545;
-            color: white;
-            min-width: 20px;
-            text-align: center;
-            font-weight: bold;
+
+        * { box-sizing: border-box; }
+        body {
+            margin: 0; background: var(--page); color: var(--ink);
+            font-family: 'DM Sans', sans-serif; font-size: 15px; overflow-x: hidden;
         }
-        .notification-bell {
-            position: relative;
-            display: inline-block;
+        a { text-decoration: none; }
+        button { font-family: inherit; }
+
+        /* SIDEBAR */
+        .sidebar {
+            width: var(--sidebar-width); position: fixed; inset: 0 auto 0 0; z-index: 1040;
+            display: flex; flex-direction: column; color: #d8e2f0;
+            background: linear-gradient(180deg, var(--navy) 0%, #102037 100%);
+            padding: 23px 16px 18px; overflow-y: auto; transition: .3s;
         }
-        .activity-item {
-            padding: 12px 16px;
-            border-radius: 10px;
-            margin-bottom: 8px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            transition: all 0.3s ease;
-            border-left: 4px solid #2c5aa0;
-            background: #f8f9fa;
-        }
-        .activity-item:hover { transform: translateX(5px); box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-        .activity-item.attendance { border-left-color: #28a745; background: #f0fff4; }
-        .activity-item.leave-pending { border-left-color: #ffc107; background: #fffbf0; }
-        .activity-item.leave-approved { border-left-color: #28a745; background: #f0fff4; }
-        .activity-item.leave-rejected { border-left-color: #dc3545; background: #fff5f5; }
-        .activity-item.performance { border-left-color: #6f42c1; background: #f8f0ff; }
-        .activity-item.notice { border-left-color: #17a2b8; background: #f0f9ff; }
-        .activity-item.notification { border-left-color: #fd7e14; background: #fff8f0; }
-        .activity-text { flex: 1; font-size: 14px; color: #333; }
-        .activity-icon { font-size: 18px; margin-right: 12px; min-width: 30px; text-align: center; }
-        .activity-time { font-size: 12px; color: #6c757d; white-space: nowrap; margin-left: 15px; background: white; padding: 2px 12px; border-radius: 20px; }
-        .activity-status-badge { font-size: 11px; padding: 2px 10px; border-radius: 20px; margin-right: 10px; }
-        .btn-success { background: #28a745; color: white; }
-        .btn-warning { background: #ffc107; color: #333; }
-        .navbar-buttons { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-        .btn-outline-light { font-size: 14px; }
+        .brand { display: flex; align-items: center; gap: 11px; padding: 0 9px 23px; border-bottom: 1px solid rgba(255,255,255,.09); margin-bottom: 20px; }
+        .brand-mark { width: 44px; height: 44px; display: grid; place-items: center; color: #fff; background: linear-gradient(145deg, #4e8bff, #2860dc); border-radius: 13px; font-size: 20px; }
+        .brand-name { color: #fff; font: 800 19px 'Plus Jakarta Sans', sans-serif; }
+        .brand-sub { color: #91a4bd; font-size: 11px; margin-top: 4px; }
+        .nav-caption { color: #71859f; font-size: 11px; font-weight: 700; text-transform: uppercase; padding: 13px 12px 8px; }
+        .side-nav { list-style: none; padding: 0; margin: 0; }
+        .side-nav li { margin: 3px 0; }
+        .side-link { display: flex; align-items: center; gap: 13px; min-height: 46px; padding: 10px 13px; border-radius: 9px; color: #aebdd0; font-size: 14px; font-weight: 500; transition: .18s ease; }
+        .side-link i { width: 20px; text-align: center; font-size: 15px; }
+        .side-link:hover { color: #fff; background: rgba(255,255,255,.075); }
+        .side-link.active { color: #fff; background: linear-gradient(100deg, #3978f5, #2e66e6); }
+        .sidebar-bottom { margin-top: auto; padding-top: 16px; border-top: 1px solid rgba(255,255,255,.08); }
+
+        /* MAIN CONTENT */
+        .main-content { margin-left: var(--sidebar-width); min-height: 100vh; padding: 0 30px 30px; }
         
-        /* Fingerprint Modal */
-        .fingerprint-modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.7);
-            z-index: 1000;
-            align-items: center;
-            justify-content: center;
-        }
-        .fingerprint-modal.active {
-            display: flex;
-        }
-        .fingerprint-modal .modal-content {
-            background: white;
-            padding: 40px;
-            border-radius: 20px;
-            text-align: center;
-            max-width: 400px;
-            width: 90%;
-        }
-        .fingerprint-modal .modal-content .fingerprint-icon {
-            font-size: 80px;
-            color: #2c5aa0;
-            margin-bottom: 20px;
-            animation: pulse 1.5s infinite;
-        }
-        .fingerprint-modal .modal-content .status-text {
-            font-size: 18px;
-            font-weight: 600;
-            color: #333;
-            margin-bottom: 10px;
-        }
-        .fingerprint-modal .modal-content .sub-text {
-            font-size: 14px;
-            color: #6c757d;
-        }
-        .fingerprint-modal .modal-content .btn-close-modal {
-            margin-top: 20px;
+        /* TOPBAR */
+        .topbar { height: 78px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); margin-bottom: 27px; }
+        .top-icon { width: 42px; height: 42px; border: 1px solid var(--line); background: #fff; color: #637187; border-radius: 10px; display: grid; place-items: center; position: relative; }
+        .top-icon:hover { background: var(--primary-soft); color: var(--primary); }
+        .notification-badge { position: absolute; top: -5px; right: -5px; background: var(--red); color: white; font-size: 10px; font-weight: 700; border-radius: 50%; min-width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; border: 2px solid white; }
+
+        .avatar { width: 42px; height: 42px; border-radius: 50%; object-fit: cover; display: flex; align-items: center; justify-content: center; color: #fff; background: linear-gradient(145deg, #6594ff, #356df3); font-weight: 700; font-size: 16px; }
+        .profile-name { display: block; font-size: 14px; font-weight: 700; }
+        .profile-role { display: block; color: var(--muted); font-size: 11px; margin-top: 2px; }
+
+        /* PAGE HEADING */
+        .page-heading { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 24px; }
+        .page-heading h1 { font-size: 28px; font-weight: 800; margin: 0; font-family: 'Plus Jakarta Sans', sans-serif; }
+        .date-chip { display: inline-flex; align-items: center; gap: 9px; padding: 10px 14px; border: 1px solid var(--line); background: #fff; border-radius: 10px; font-size: 13px; font-weight: 600; }
+
+        /* CARDS */
+        .stat-card, .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); }
+        .stat-card { padding: 20px; display: flex; align-items: center; gap: 15px; height: 100%; }
+        .stat-icon { width: 50px; height: 50px; border-radius: 12px; display: grid; place-items: center; font-size: 20px; flex-shrink: 0; }
+        .ic-blue { color: var(--primary); background: #edf3ff; }
+        .ic-green { color: var(--green); background: #ecfdf5; }
+        .ic-orange { color: var(--orange); background: #fff7ed; }
+        .ic-purple { color: var(--purple); background: #f5f3ff; }
+        .stat-label { color: var(--muted); font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+        .stat-value { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 26px; font-weight: 800; line-height: 1.2; }
+
+        .panel { padding: 24px; margin-bottom: 24px; }
+        .panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+        .panel-title { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 16px; font-weight: 800; margin: 0; display: flex; align-items: center; gap: 8px; }
+        .panel-title i { color: var(--primary); }
+        
+        /* ATTENDANCE CARD */
+        .attendance-widget { background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border: 1px solid var(--line); border-radius: 16px; padding: 25px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 20px; box-shadow: var(--shadow); margin-bottom: 24px; }
+        .attendance-status-box { display: flex; align-items: center; gap: 15px; }
+        .attendance-icon { width: 60px; height: 60px; border-radius: 16px; background: var(--primary-soft); color: var(--primary); display: grid; place-items: center; font-size: 24px; }
+        .attendance-status-text { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 22px; font-weight: 800; margin: 0; }
+        .attendance-subtext { color: var(--muted); font-size: 12px; margin-top: 4px; }
+        
+        .attendance-time-grid { display: flex; gap: 12px; margin-top: 15px; }
+        .time-box { background: #fff; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--line); }
+        .time-box span { font-size: 10px; color: var(--muted); display: block; text-transform: uppercase; font-weight: 700; }
+        .time-box strong { font-size: 14px; font-weight: 800; color: var(--ink); }
+
+        .attendance-actions { display: flex; gap: 10px; width: 100%; max-width: 300px; }
+        .btn-attendance { flex: 1; padding: 12px; border-radius: 10px; border: none; font-weight: 700; font-size: 14px; transition: 0.2s; display: flex; align-items: center; justify-content: center; gap: 6px; }
+        .btn-in { background: var(--green); color: white; }
+        .btn-out { background: #fff; color: var(--red); border: 1px solid #fecaca; }
+        .btn-attendance:not(:disabled):hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
+        .btn-attendance:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* NOTEPAD TIMELINE */
+        .notes-timeline { max-height: 250px; overflow-y: auto; padding-right: 10px; margin-top: 15px; }
+        .notes-timeline::-webkit-scrollbar { width: 6px; }
+        .notes-timeline::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .note-item { position: relative; padding-left: 22px; padding-bottom: 18px; border-left: 2px solid var(--line); margin-left: 8px; }
+        .note-item:last-child { border-left: 2px solid transparent; padding-bottom: 0; }
+        .note-item::before { content: ''; position: absolute; left: -7px; top: 0; width: 12px; height: 12px; border-radius: 50%; background: var(--primary); border: 2px solid #fff; box-shadow: 0 0 0 3px var(--primary-soft); }
+        .note-time { font-size: 11px; color: var(--muted); font-weight: 700; margin-bottom: 4px; }
+        .note-text { font-size: 14px; color: var(--ink); background: #f8fafc; padding: 12px 15px; border-radius: 10px; border: 1px solid var(--line); }
+
+        /* QUICK ACTIONS */
+        .quick-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+        .quick-btn { display: flex; align-items: center; gap: 10px; padding: 12px; background: #fff; border: 1px solid var(--line); border-radius: 10px; transition: 0.2s; color: var(--ink); cursor: pointer; }
+        .quick-btn:hover { border-color: var(--primary); background: var(--primary-soft); transform: translateY(-2px); }
+        .quick-btn i { width: 32px; height: 32px; border-radius: 8px; display: grid; place-items: center; font-size: 14px; }
+        .quick-btn strong { font-size: 12px; display: block; }
+        .quick-btn small { font-size: 10px; color: var(--muted); }
+
+        /* COMPACT PROFILE CARD */
+        .profile-compact { text-align: center; }
+        .profile-compact-avatar { width: 70px; height: 70px; border-radius: 50%; object-fit: cover; border: 3px solid #f8fafc; box-shadow: 0 4px 10px rgba(0,0,0,0.05); margin: 0 auto 10px; }
+        .profile-compact-initials { width: 70px; height: 70px; border-radius: 50%; background: var(--primary-soft); color: var(--primary); display: grid; place-items: center; font-size: 24px; font-weight: 800; margin: 0 auto 10px; border: 3px solid #f8fafc; }
+
+        /* RECENT ACTIVITY */
+        .activity-list { list-style: none; padding: 0; margin: 0; }
+        .activity-item { display: flex; gap: 12px; padding-bottom: 15px; position: relative; }
+        .activity-item:last-child { padding-bottom: 0; }
+        .activity-item:not(:last-child)::before { content: ''; position: absolute; left: 15px; top: 28px; bottom: 0; width: 2px; background: var(--line); }
+        .activity-icon { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--primary-soft); color: var(--primary); z-index: 1; flex-shrink: 0; font-size: 12px;}
+        .activity-text { font-size: 12px; font-weight: 600; color: var(--ink); margin-bottom: 2px; }
+        .activity-time { font-size: 10px; color: var(--muted); }
+
+        /* PAYSLIP TABLE */
+        .table th { background: #f8fafc; color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; border-bottom: 1px solid var(--line); padding: 12px 15px; }
+        .table td { vertical-align: middle; padding: 12px 15px; font-size: 13px; border-bottom: 1px solid var(--line); }
+        .status-paid { background: #ecfdf5; color: var(--green); padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+
+        /* MOBILE */
+        .sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 1030; }
+        @media (max-width: 991px) {
+            .sidebar { transform: translateX(-100%); }
+            .sidebar.active { transform: translateX(0); }
+            .main-content { margin-left: 0; padding: 0 20px 20px; }
+            .sidebar-overlay.active { display: block; }
+            .attendance-widget { flex-direction: column; text-align: center; }
+            .attendance-status-box { flex-direction: column; }
+            .attendance-actions { max-width: 100%; }
         }
     </style>
 </head>
 <body>
-    <div class="navbar">
-        <h4><i class="fas fa-user-tie me-2"></i>Employee Portal</h4>
-        <div class="navbar-buttons">
-            <a href="#" class="btn btn-outline-light me-1" onclick="toggleNotifications(event)" title="Notifications">
-                <span class="notification-bell">
-                    <i class="fas fa-bell"></i>
-                    <span class="notification-badge" id="noticeBadge" style="<?php echo $unread_count > 0 ? 'display:inline;' : 'display:none;'; ?>"><?php echo $unread_count; ?></span>
-                </span>
-            </a>
-            <a href="modules/submit-work.php" class="btn btn-outline-light me-1">
-                <i class="fas fa-upload me-1"></i>Submit Work
-            </a>
-            <a href="modules/leave.php" class="btn btn-outline-light me-1">
-                <i class="fas fa-calendar-alt me-1"></i>Leave
-            </a>
-            <a href="modules/performance.php" class="btn btn-outline-success me-1">
-                <i class="fas fa-chart-line me-1"></i>Performance
-            </a>
-            <a href="logout.php" class="btn btn-danger">
-                <i class="fas fa-sign-out-alt me-1"></i>Logout
-            </a>
-        </div>
-    </div>
 
-    <div class="container">
-        <div class="row">
-            <div class="col-4">
-                <div class="profile-card">
-                    <?php
-                        $pic = $_SESSION['profile_picture'] ?? '';
-                        $is_url = !empty($pic) && (strpos($pic, 'http://') === 0 || strpos($pic, 'https://') === 0);
-                        $is_local = !empty($pic) && !$is_url && file_exists(__DIR__ . '/' . $pic);
-                    ?>
-                    <?php if($is_url): ?>
-                        <img src="<?php echo $pic; ?>" class="avatar" id="profileImage">
-                    <?php elseif($is_local): ?>
-                        <img src="/kormoshathi/<?php echo $pic; ?>" class="avatar" id="profileImage">
+    <div class="sidebar-overlay" id="mobileOverlay" onclick="toggleSidebar()"></div>
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar" id="sidebar">
+        <a href="employee-dashboard.php" class="brand">
+            <span class="brand-mark"><i class="fa-solid fa-people-group"></i></span>
+            <span><span class="brand-name d-block">KormoShathi</span><span class="brand-sub d-block">HR MANAGEMENT SYSTEM</span></span>
+        </a>
+        
+        <div class="nav-caption">Workspace</div>
+        <ul class="side-nav">
+            <li><a href="employee-dashboard.php" class="side-link active"><i class="fa-solid fa-table-cells-large"></i> Dashboard</a></li>
+            <li><a href="modules/chat.php" class="side-link"><i class="fa-regular fa-comments"></i> Messages</a></li>
+            <li><a href="modules/my-attendance.php" class="side-link"><i class="fa-solid fa-fingerprint"></i> My Attendance</a></li>
+            <li><a href="modules/leave.php" class="side-link"><i class="fa-regular fa-calendar-check"></i> Leave Management</a></li>
+            <li><a href="modules/submit-work.php" class="side-link"><i class="fa-solid fa-cloud-arrow-up"></i> Submit Work</a></li>
+        </ul>
+
+        <div class="nav-caption">My Workspace</div>
+        <ul class="side-nav">
+            <li><a href="modules/my-payroll.php" class="side-link"><i class="fa-solid fa-wallet"></i> My Salary & Payslip</a></li>
+            <li><a href="modules/tasks.php" class="side-link"><i class="fa-solid fa-list-check"></i> My Tasks</a></li>
+            <li><a href="modules/performance.php" class="side-link"><i class="fa-solid fa-chart-line"></i> Performance</a></li>
+            <li><a href="modules/employee-settings.php" class="side-link"><i class="fa-solid fa-gear"></i> Settings</a></li>
+            <li><a href="profile.php" class="side-link"><i class="fa-solid fa-user"></i> My Profile</a></li>
+        </ul>
+
+        <div class="nav-caption">Company</div>
+        <ul class="side-nav">
+            <li><a href="modules/notice-board.php" class="side-link"><i class="fa-solid fa-bullhorn"></i> Notice & Events</a></li>
+            <li><a href="modules/documents.php" class="side-link"><i class="fa-regular fa-file-pdf"></i> My Documents</a></li>
+            <li><a href="modules/holidays.php" class="side-link"><i class="fa-solid fa-umbrella-beach"></i> Holiday Calendar</a></li>
+        </ul>
+
+        <div class="sidebar-bottom">
+            <ul class="side-nav">
+                <li><a href="logout.php" class="side-link text-danger"><i class="fa-solid fa-arrow-right-from-bracket"></i> Logout</a></li>
+            </ul>
+        </div>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="main-content">
+        <!-- TOPBAR -->
+        <header class="topbar">
+            <div class="d-flex align-items-center gap-3">
+                <button class="btn btn-light d-lg-none" onclick="toggleSidebar()"><i class="fa-solid fa-bars"></i></button>
+                <h4 class="fw-bold m-0 d-flex align-items-center gap-2" style="font-family: 'Plus Jakarta Sans', sans-serif;"><i class="fa-solid fa-gauge-high text-primary"></i> Dashboard</h4>
+            </div>
+
+            <div class="d-flex align-items-center gap-3">
+                <button class="top-icon" onclick="openNotifications(event)">
+                    <i class="fa-regular fa-bell"></i>
+                    <span class="notification-badge" id="noticeBadge" style="<?php echo $unread_count > 0 ? '' : 'display:none;'; ?>">
+                        <?php echo $unread_count; ?>
+                    </span>
+                </button>
+                
+                <div class="d-flex align-items-center gap-2 ps-2">
+                    <?php if ($profileImage): ?>
+                        <img src="<?php echo e($profileImage); ?>" class="avatar" alt="Profile">
                     <?php else: ?>
-                        <div class="avatar-placeholder" id="profileImage">
-                            <?php echo strtoupper(substr($_SESSION['first_name'], 0, 1) . substr($_SESSION['last_name'], 0, 1)); ?>
-                        </div>
+                        <div class="avatar"><?php echo e($initials); ?></div>
                     <?php endif; ?>
-                    <h4><?php echo $_SESSION['first_name'] . ' ' . $_SESSION['last_name']; ?></h4>
-                    <p class="text-muted"><?php echo $_SESSION['position'] ?? 'Employee'; ?></p>
-                    <hr>
-                    <p><strong>Employee ID:</strong> <?php echo $_SESSION['employee_id']; ?></p>
-                    <p><strong>Department:</strong> <?php echo $_SESSION['department'] ?? 'N/A'; ?></p>
-                    <p><strong>Email:</strong> <?php echo $_SESSION['email']; ?></p>
-                    <a href="profile.php" class="btn btn-sm btn-outline-primary mt-2">
-                        <i class="fas fa-camera me-1"></i>Update Photo
-                    </a>
+                    <div class="d-none d-md-block">
+                        <span class="profile-name"><?php echo e($firstName); ?></span>
+                        <span class="profile-role"><?php echo e($position); ?></span>
+                    </div>
                 </div>
             </div>
-            <div class="col-8">
-                <div class="row">
-                    <div class="col-6">
-                        <div class="stat-card bg-success text-white text-center">
-                            <h5>Today's Status</h5>
-                            <h2 id="attendanceStatus">Not Checked In</h2>
-                        </div>
-                    </div>
-                    <div class="col-6">
-                        <div class="stat-card bg-info text-white text-center">
-                            <h5>Leave Balance</h5>
-                            <h2 id="leaveBalance">20</h2>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Mark Attendance with Fingerprint -->
-                <div class="stat-card text-center">
-                    <h5><i class="fas fa-fingerprint me-2"></i>Mark Attendance</h5>
-                    <div class="row">
-                        <div class="col-6">
-                            <button class="btn-attendance btn-success" onclick="markAttendance('check_in')">
-                                <i class="fas fa-sign-in-alt me-2"></i>Check In
-                            </button>
-                        </div>
-                        <div class="col-6">
-                            <button class="btn-attendance btn-warning" onclick="markAttendance('check_out')">
-                                <i class="fas fa-sign-out-alt me-2"></i>Check Out
-                            </button>
-                        </div>
-                    </div>
-                    <div class="fingerprint" id="fingerprintScanner" onclick="openFingerprintModal()">
-                        <i class="fas fa-fingerprint"></i>
-                    </div>
-                    <small class="text-muted mt-2 d-block">Click fingerprint to scan</small>
-                </div>
-                
-                <!-- Recent Activity -->
-                <div class="stat-card">
-                    <div class="activity-header">
-                        <h5><i class="fas fa-history me-2 text-primary"></i>Recent Activity (Last 24 Hours)</h5>
-                        <span class="activity-count" id="activityCount">0 activities</span>
-                    </div>
-                    <div id="recentActivity"><p class="text-muted text-center py-3">No recent activity</p></div>
-                </div>
+        </header>
+
+        <!-- PAGE HEADING -->
+        <div class="page-heading">
+            <div>
+                <div class="text-primary fw-bold" style="font-size: 12px; letter-spacing: 1px; text-transform: uppercase;">Employee Workspace</div>
+                <h1>Welcome back, <?php echo e($firstName); ?>! 👋</h1>
+                <p class="text-muted mb-0">Here is your daily overview and quick stats.</p>
             </div>
-        </div>
-    </div>
-
-    <!-- Fingerprint Modal -->
-    <div class="fingerprint-modal" id="fingerprintModal">
-        <div class="modal-content">
-            <div class="fingerprint-icon">
-                <i class="fas fa-fingerprint" id="fingerprintIcon"></i>
-            </div>
-            <div class="status-text" id="fingerprintStatus">Place your finger</div>
-            <div class="sub-text" id="fingerprintSub">Use your device's fingerprint scanner</div>
-            <div id="fingerprintResult" class="mt-2"></div>
-            <button class="btn btn-secondary btn-close-modal" onclick="closeFingerprintModal()">Close</button>
-        </div>
-    </div>
-
-    <!-- Notification Modal -->
-    <div class="modal fade" id="notificationModal" tabindex="-1">
-        <div class="modal-dialog modal-dialog-scrollable">
-            <div class="modal-content">
-                <div class="modal-header" style="background: linear-gradient(135deg, #2c5aa0 0%, #1e3d72 100%); color: white;">
-                    <h5 class="modal-title"><i class="fas fa-bell me-2"></i>Notifications</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body" id="notificationList">
-                    <p class="text-muted text-center py-3">Loading notifications...</p>
-                </div>
-                <div class="modal-footer">
-                    <button class="btn btn-sm btn-primary" onclick="markAllAsReadAndClose()">
-                        <i class="fas fa-check-double me-1"></i>OK (Mark All as Read)
-                    </button>
-                    <button class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        let realtimeInterval;
-        let notificationModal;
-        let fingerprintScanning = false;
-
-        document.addEventListener('DOMContentLoaded', function() {
-            notificationModal = new bootstrap.Modal(document.getElementById('notificationModal'));
-        });
-
-        // ============================================
-        // FINGERPRINT ATTENDANCE
-        // ============================================
-        function openFingerprintModal() {
-            document.getElementById('fingerprintModal').classList.add('active');
-            document.getElementById('fingerprintStatus').textContent = 'Scanning...';
-            document.getElementById('fingerprintSub').textContent = 'Please place your finger on the scanner';
-            document.getElementById('fingerprintResult').innerHTML = '';
-            document.getElementById('fingerprintIcon').style.color = '#ffc107';
             
-            // Simulate fingerprint scanning
-            fingerprintScanning = true;
-            setTimeout(() => {
-                if (fingerprintScanning) {
-                    // Simulate successful scan
-                    document.getElementById('fingerprintStatus').textContent = '✅ Fingerprint Matched!';
-                    document.getElementById('fingerprintSub').textContent = 'Attendance marked successfully';
-                    document.getElementById('fingerprintIcon').style.color = '#28a745';
-                    document.getElementById('fingerprintResult').innerHTML = 
-                        '<div class="alert alert-success">✅ Checked In at ' + new Date().toLocaleTimeString() + '</div>';
+            <div class="d-flex gap-2">
+                <div class="date-chip">
+                    <i class="fa-regular fa-calendar me-2 text-primary"></i>
+                    <span id="currentDate"></span>
+                </div>
+                <div class="date-chip" style="border-color: #a9c2ff; background: #f4f8ff;">
+                    <i class="fa-regular fa-clock me-2 text-primary"></i>
+                    <span id="liveClock">--:--:--</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- KPI CARDS -->
+        <div class="row g-3 mb-4">
+            <div class="col-md-6 col-xl-4">
+                <div class="stat-card">
+                    <div class="stat-icon ic-green"><i class="fa-solid fa-clock"></i></div>
+                    <div>
+                        <div class="stat-label">Today's Attendance</div>
+                        <div class="stat-value" id="attendanceStatus">--</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6 col-xl-4">
+                <div class="stat-card">
+                    <div class="stat-icon ic-blue"><i class="fa-solid fa-calendar-check"></i></div>
+                    <div>
+                        <div class="stat-label">Leave Balance</div>
+                        <div class="stat-value"><span id="leaveBalance">--</span> <small style="font-size:14px;">Days</small></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6 col-xl-4">
+                <div class="stat-card">
+                    <div class="stat-icon ic-purple"><i class="fa-solid fa-money-bill-wave"></i></div>
+                    <div>
+                        <div class="stat-label">Current Month Salary</div>
+                        <div class="stat-value" style="font-size: 20px;" id="currentSalary">৳ --</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- MAIN GRID -->
+        <div class="row g-3 align-items-start">
+            
+            <!-- LEFT COLUMN -->
+            <div class="col-lg-8">
+                
+                <!-- ATTENDANCE WIDGET -->
+                <div class="attendance-widget" id="attendanceSection">
+                    <div>
+                        <div class="attendance-status-box">
+                            <div class="attendance-icon"><i class="fa-solid fa-fingerprint"></i></div>
+                            <div>
+                                <h2 class="attendance-status-text" id="attendanceStatusLabel">Not Checked In</h2>
+                            </div>
+                        </div>
+                        
+                        <div class="attendance-time-grid">
+                            <div class="time-box">
+                                <span><i class="fa-solid fa-right-to-bracket text-success me-1"></i> Check In</span>
+                                <strong id="checkInTime">--:--</strong>
+                            </div>
+                            <div class="time-box">
+                                <span><i class="fa-solid fa-right-from-bracket text-danger me-1"></i> Check Out</span>
+                                <strong id="checkOutTime">--:--</strong>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="attendance-actions">
+                        <button class="btn-attendance btn-in" id="checkInButton" onclick="markAttendance('check_in')">
+                            <i class="fa-solid fa-arrow-right-to-bracket"></i> Check In
+                        </button>
+                        <button class="btn-attendance btn-out" id="checkOutButton" onclick="markAttendance('check_out')">
+                            <i class="fa-solid fa-arrow-right-from-bracket"></i> Check Out
+                        </button>
+                    </div>
+                </div>
+
+                <!-- DAILY ROUTINE & NOTES HISTORY -->
+                <div class="panel note-widget">
+                    <div class="panel-header d-flex justify-content-between align-items-center">
+                        <h5 class="panel-title"><i class="fa-solid fa-pen-to-square text-primary"></i> Daily Routine & Notes</h5>
+                        <button type="button" class="btn btn-sm btn-outline-danger fw-bold" id="clearHistoryBtn" style="font-size: 11px;"><i class="fa-solid fa-trash me-1"></i> Clear History</button>
+                    </div>
                     
-                    // Actually mark attendance
-                    markAttendance('check_in');
-                    fingerprintScanning = false;
+                    <div class="d-flex gap-2 mb-2">
+                        <input type="text" id="newNoteInput" class="form-control" placeholder="Write a new note or routine task..." style="border-radius: 10px; background: #fbfcfe;">
+                        <button type="button" id="addNoteBtn" class="btn btn-primary" style="border-radius: 10px; padding: 0 20px;"><i class="fa-solid fa-plus"></i></button>
+                    </div>
                     
-                    setTimeout(() => {
-                        closeFingerprintModal();
-                    }, 2000);
-                }
-            }, 3000);
+                    <div class="notes-timeline" id="notesTimeline">
+                    </div>
+                </div>
+
+                <!-- QUICK ACTIONS -->
+                <div class="panel">
+                    <div class="panel-header">
+                        <h5 class="panel-title"><i class="fa-solid fa-bolt text-warning"></i> Quick Actions</h5>
+                    </div>
+                    <div class="quick-grid">
+                        <a href="modules/leave.php" class="quick-btn">
+                            <i class="fa-solid fa-calendar-plus bg-orange bg-opacity-10 text-orange"></i>
+                            <div><strong>Apply Leave</strong><small>Request time off</small></div>
+                        </a>
+                        <a href="modules/submit-work.php" class="quick-btn">
+                            <i class="fa-solid fa-file-arrow-up bg-blue bg-opacity-10 text-blue"></i>
+                            <div><strong>Submit Work</strong><small>Upload daily work</small></div>
+                        </a>
+                        <a href="modules/my-payroll.php" class="quick-btn">
+                            <i class="fa-solid fa-file-invoice-dollar bg-purple bg-opacity-10 text-purple"></i>
+                            <div><strong>Payslip</strong><small>Download PDF</small></div>
+                        </a>
+                        <!-- 🟢 Google Calendar Quick Action -->
+                        <button type="button" onclick="openCalendarModal()" class="quick-btn text-start">
+                            <i class="fa-brands fa-google bg-danger bg-opacity-10 text-danger"></i>
+                            <div><strong>Google Calendar</strong><small>Add Task / Event</small></div>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- MY SALARY & PAYSLIP -->
+                <div class="panel mb-0">
+                    <div class="panel-header">
+                        <h5 class="panel-title"><i class="fa-solid fa-wallet text-primary"></i> Recent Payslips</h5>
+                        <a href="modules/my-payroll.php" class="text-primary fw-bold text-decoration-none" style="font-size: 13px;">View All</a>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Pay Period</th>
+                                    <th>Net Salary</th>
+                                    <th>Status</th>
+                                    <th class="text-end">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="payslipTableBody">
+                                <tr>
+                                    <td colspan="4" class="text-center py-3 text-muted">Loading...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- RIGHT COLUMN -->
+            <div class="col-lg-4">
+                
+                <!-- PROFILE CARD -->
+                <div class="panel mb-3">
+                    <div class="profile-compact">
+                        <?php if ($profileImage): ?>
+                            <img src="<?php echo e($profileImage); ?>" class="profile-compact-avatar" alt="Employee">
+                        <?php else: ?>
+                            <div class="profile-compact-initials"><?php echo e($initials); ?></div>
+                        <?php endif; ?>
+
+                        <h5 class="fw-bold mb-1"><?php echo e($fullName); ?></h5>
+                        <p class="text-muted mb-3" style="font-size: 12px;"><?php echo e($position); ?></p>
+
+                        <div class="d-flex justify-content-between mb-2" style="font-size: 11px;">
+                            <span class="text-muted">Employee ID:</span>
+                            <span class="fw-bold"><?php echo e($employeeId); ?></span>
+                        </div>
+                        <div class="d-flex justify-content-between mb-3" style="font-size: 11px;">
+                            <span class="text-muted">Department:</span>
+                            <span class="fw-bold"><?php echo e($department); ?></span>
+                        </div>
+
+                        <a href="profile.php" class="btn btn-outline-primary w-100 rounded-pill btn-sm fw-bold" style="font-size:12px;">
+                            View Full Profile
+                        </a>
+                    </div>
+                </div>
+
+                <!-- UPCOMING HOLIDAYS -->
+                <div class="panel mb-3">
+                    <div class="panel-header">
+                        <h5 class="panel-title"><i class="fa-solid fa-umbrella-beach text-warning"></i> Upcoming Holidays</h5>
+                    </div>
+                    <ul class="list-unstyled mb-0" id="upcomingHolidaysList">
+                        <li class="text-center text-muted py-3"><i class="fa-solid fa-spinner fa-spin"></i> Loading...</li>
+                    </ul>
+                </div>
+
+                <!-- RECENT ACTIVITY -->
+                <div class="panel mb-0">
+                    <div class="panel-header">
+                        <h5 class="panel-title"><i class="fa-solid fa-clock-rotate-left text-primary"></i> Recent Activity</h5>
+                        <span class="badge bg-light text-dark border" id="activityCount">0</span>
+                    </div>
+                    <ul class="activity-list" id="recentActivityList">
+                        <li class="text-center text-muted py-3">
+                            <i class="fa-solid fa-spinner fa-spin fs-5"></i>
+                            <p class="mt-1 mb-0" style="font-size:12px;">Loading...</p>
+                        </li>
+                    </ul>
+                </div>
+
+            </div>
+        </div>
+
+    </main>
+
+    <!-- GOOGLE CALENDAR MODAL -->
+    <div class="modal fade" id="calendarModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content" style="border-radius: 16px; border: none;">
+                <div class="modal-header bg-light border-bottom-0">
+                    <h5 class="modal-title fw-bold"><i class="fa-brands fa-google text-danger me-2"></i> Add Task to Google Calendar</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <form id="calendarForm">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Task Title <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="cal_title" required placeholder="e.g. Finish Project Report">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Description</label>
+                            <textarea class="form-control" id="cal_desc" rows="2" placeholder="Task details..."></textarea>
+                        </div>
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-12">
+                                <label class="form-label fw-bold">Date <span class="text-danger">*</span></label>
+                                <input type="date" class="form-control" id="cal_date" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">Start Time <span class="text-danger">*</span></label>
+                                <input type="time" class="form-control" id="cal_start" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">End Time (Deadline) <span class="text-danger">*</span></label>
+                                <input type="time" class="form-control" id="cal_end" required>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Reminder</label>
+                            <select class="form-select" id="cal_reminder">
+                                <option value="10">10 minutes before</option>
+                                <option value="30">30 minutes before</option>
+                                <option value="60">1 hour before</option>
+                                <option value="1440">1 day before</option>
+                            </select>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer border-top-0 pt-0">
+                    <button type="button" class="btn btn-light fw-bold" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary fw-bold px-4" onclick="createCalendarEvent()">Create Event <i class="fa-solid fa-arrow-right ms-1"></i></button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- NOTIFICATION MODAL -->
+    <div class="modal fade" id="notificationModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content" style="border:none;border-radius:16px;">
+                <div class="modal-header bg-light border-bottom-0">
+                    <h5 class="modal-title fw-bold"><i class="fa-regular fa-bell text-primary me-2"></i> Notifications</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="notificationList" style="background:#f8fafc;">
+                    <div class="text-center py-4 text-muted">Loading...</div>
+                </div>
+                <div class="modal-footer border-top-0 bg-white">
+                    <button class="btn btn-primary btn-sm rounded-pill px-3 fw-bold" onclick="markAllAsReadAndClose()">
+                        <i class="fa-solid fa-check-double me-1"></i> Mark All as Read
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        'use strict';
+
+        let notificationModal = null;
+        let calendarModal = null;
+        let realtimeInterval = null;
+        const BD_TIME_ZONE = 'Asia/Dhaka';
+
+        // ==========================================
+        // 🟢 GOOGLE CALENDAR LOGIC
+        // ==========================================
+        function openCalendarModal() {
+            // Set default date to today
+            document.getElementById('cal_date').value = new Date().toISOString().split('T')[0];
+            // Set default times (Current time + 1 hour to + 2 hours)
+            const now = new Date();
+            now.setHours(now.getHours() + 1);
+            document.getElementById('cal_start').value = now.toTimeString().slice(0, 5);
+            now.setHours(now.getHours() + 1);
+            document.getElementById('cal_end').value = now.toTimeString().slice(0, 5);
+            
+            document.getElementById('calendarForm').reset();
+            document.getElementById('cal_date').value = new Date().toISOString().split('T')[0];
+            
+            calendarModal.show();
         }
 
-        function closeFingerprintModal() {
-            fingerprintScanning = false;
-            document.getElementById('fingerprintModal').classList.remove('active');
+        function createCalendarEvent() {
+            const title = document.getElementById('cal_title').value.trim();
+            const desc = document.getElementById('cal_desc').value.trim();
+            const date = document.getElementById('cal_date').value;
+            const start = document.getElementById('cal_start').value;
+            const end = document.getElementById('cal_end').value;
+            const reminderMins = document.getElementById('cal_reminder').value;
+
+            if (!title || !date || !start || !end) {
+                alert('Please fill in all required fields.');
+                return;
+            }
+
+            // Format for Google Calendar URL (YYYYMMDDTHHMMSS)
+            const startDateTime = date.replace(/-/g, '') + 'T' + start.replace(/:/g, '') + '00';
+            const endDateTime = date.replace(/-/g, '') + 'T' + end.replace(/:/g, '') + '00';
+
+            // Build Google Calendar URL
+            let url = `https://calendar.google.com/calendar/render?action=TEMPLATE`;
+            url += `&text=${encodeURIComponent(title)}`;
+            url += `&dates=${startDateTime}/${endDateTime}`;
+            if (desc) url += `&details=${encodeURIComponent(desc)}`;
+            
+            // Add reminder
+            url += `&reminders=popup&reminder_time=${reminderMins}`;
+
+            // Open in new tab
+            window.open(url, '_blank');
+            
+            // Close modal
+            calendarModal.hide();
         }
 
-        // ============================================
-        // ATTENDANCE FUNCTIONS
-        // ============================================
-        async function markAttendance(type) {
+
+        // ==========================================
+        // 🟢 NOTES HISTORY LOGIC (Local Storage)
+        // ==========================================
+        function loadNotesHistory() {
+            const timeline = document.getElementById('notesTimeline');
+            let notes = [];
             try {
-                const response = await fetch('api/attendance.php', { 
-                    method: 'POST', 
-                    headers: { 'Content-Type': 'application/json' }, 
-                    body: JSON.stringify({ type: type }) 
+                notes = JSON.parse(localStorage.getItem('kormoshathi_notes_history') || '[]');
+            } catch(e) {
+                console.error('Error parsing notes', e);
+            }
+            
+            if (notes.length === 0) {
+                timeline.innerHTML = '<p class="text-center text-muted mt-4" style="font-size:13px;">No notes added yet. Start writing your routine!</p>';
+                return;
+            }
+
+            timeline.innerHTML = notes.map(n => {
+                const dateObj = new Date(n.time);
+                const timeStr = dateObj.toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
+                
+                return `
+                    <div class="note-item">
+                        <div class="note-time"><i class="fa-regular fa-clock me-1"></i> ${timeStr}</div>
+                        <div class="note-text">${escapeHTML(n.text)}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function addNote() {
+            const input = document.getElementById('newNoteInput');
+            const text = input.value.trim();
+            
+            if (!text) {
+                input.focus();
+                return;
+            }
+
+            try {
+                const notes = JSON.parse(localStorage.getItem('kormoshathi_notes_history') || '[]');
+                notes.unshift({
+                    text: text,
+                    time: new Date().toISOString()
                 });
-                const result = await response.json();
-                
-                if (!result.success) {
-                    alert(result.message);
-                }
-                
-                if (result.success) {
-                    loadDashboardData();
-                    loadLeaveBalance();
-                    loadRecentActivity();
-                }
-            } catch(e) { 
-                console.error('Error marking attendance:', e);
+
+                localStorage.setItem('kormoshathi_notes_history', JSON.stringify(notes));
+                input.value = '';
+                loadNotesHistory();
+            } catch(e) {
+                alert("Could not save note. Local storage might be disabled or full.");
             }
         }
 
-        // ============================================
-        // DASHBOARD FUNCTIONS
-        // ============================================
+        function clearNotesHistory() {
+            if(confirm('Are you sure you want to clear all your notes history?')) {
+                localStorage.removeItem('kormoshathi_notes_history');
+                loadNotesHistory();
+            }
+        }
+
+
+        // ==========================================
+        // DASHBOARD CORE LOGIC
+        // ==========================================
+        function updateClock() {
+            const now = new Date();
+            const clock = document.getElementById('liveClock');
+            const date = document.getElementById('currentDate');
+
+            if (clock) {
+                clock.textContent = new Intl.DateTimeFormat('en-US', {
+                    timeZone: BD_TIME_ZONE, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true
+                }).format(now);
+            }
+            if (date) {
+                date.textContent = new Intl.DateTimeFormat('en-US', {
+                    timeZone: BD_TIME_ZONE, weekday: 'short', month: 'short', day: 'numeric', year: 'numeric'
+                }).format(now);
+            }
+        }
+
+        function formatBDTime(value) {
+            if (!value) return '--:--';
+            const raw = String(value).trim();
+
+            const timeMatch = raw.match(/^(\d{2}):(\d{2})(?::(\d{2}))?$/);
+            if (timeMatch) {
+                let hour = Number(timeMatch[1]);
+                const minute = timeMatch[2];
+                const period = hour >= 12 ? 'PM' : 'AM';
+                hour = hour % 12 || 12;
+                return `${hour}:${minute} ${period}`;
+            }
+
+            const mysqlMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/);
+            if (mysqlMatch) {
+                let hour = Number(mysqlMatch[4]);
+                const minute = mysqlMatch[5];
+                const period = hour >= 12 ? 'PM' : 'AM';
+                hour = hour % 12 || 12;
+                return `${hour}:${minute} ${period}`;
+            }
+            
+            const date = new Date(raw);
+            if (Number.isNaN(date.getTime())) return '--:--';
+            return new Intl.DateTimeFormat('en-US', { timeZone: BD_TIME_ZONE, hour: 'numeric', minute: '2-digit', hour12: true }).format(date);
+        }
+
+        function setAttendanceIndicator(status, checkIn, checkOut) {
+            const labelElement = document.getElementById('attendanceStatusLabel');
+            const statusElement = document.getElementById('attendanceStatus');
+            const checkInButton = document.getElementById('checkInButton');
+            const checkOutButton = document.getElementById('checkOutButton');
+
+            let label = 'Not Checked In';
+            let color = 'var(--orange)';
+
+            if (checkOut) { label = 'Completed'; color = 'var(--green)'; }
+            else if (checkIn) { label = 'Checked In'; color = 'var(--green)'; }
+
+            statusElement.textContent = label;
+            labelElement.textContent = label;
+            labelElement.style.color = color;
+
+            document.getElementById('checkInTime').textContent = checkIn ? formatBDTime(checkIn) : '--:--';
+            document.getElementById('checkOutTime').textContent = checkOut ? formatBDTime(checkOut) : '--:--';
+
+            checkInButton.disabled = Boolean(checkIn);
+            checkOutButton.disabled = !checkIn || Boolean(checkOut);
+        }
+
         async function loadDashboardData() {
             try {
-                const attResponse = await fetch('api/attendance.php?action=today_status');
-                const attData = await attResponse.json();
-                if (attData.success) {
-                    document.getElementById('attendanceStatus').innerHTML = attData.status;
+                const response = await fetch('api/attendance.php?action=today_status', { cache: 'no-store' });
+                const result = await response.json();
+                if (result.success) {
+                    const data = result.data || result;
+                    const checkIn = data.check_in_time || data.check_in || null;
+                    const checkOut = data.check_out_time || data.check_out || null;
+                    setAttendanceIndicator(data.status || '', checkIn, checkOut);
                 }
-            } catch(e) { 
-                console.error('Error loading dashboard:', e); 
+            } catch (error) { console.error('Attendance load error:', error); }
+        }
+
+        async function markAttendance(type) {
+            const button = type === 'check_in' ? document.getElementById('checkInButton') : document.getElementById('checkOutButton');
+            const originalHTML = button.innerHTML;
+            button.disabled = true;
+            button.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+
+            try {
+                const response = await fetch('api/attendance.php', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type })
+                });
+                const result = await response.json();
+                if (!result.success) throw new Error(result.message);
+                
+                alert(result.message || 'Attendance updated!');
+                await loadDashboardData();
+                await loadRecentActivity();
+                if(typeof loadEmpMonthlyAttendance === 'function') loadEmpMonthlyAttendance();
+            } catch (error) {
+                alert(error.message || 'Operation failed.');
+            } finally {
+                button.innerHTML = originalHTML;
+                await loadDashboardData();
+            }
+        }
+
+        function escapeHTML(value) {
+            return String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[c]));
+        }
+
+        async function loadRecentActivity() {
+            const container = document.getElementById('recentActivityList');
+            const count = document.getElementById('activityCount');
+            try {
+                const response = await fetch('api/employee-activity.php', { cache: 'no-store' });
+                const result = await response.json();
+                const activities = result.data || [];
+
+                count.textContent = `${activities.length}`;
+                if (activities.length === 0) {
+                    container.innerHTML = `<li class="text-center py-3 text-muted"><i class="fa-regular fa-folder-open fs-4 mb-2"></i><p class="mb-0" style="font-size:12px;">No recent activity</p></li>`;
+                    return;
+                }
+
+                container.innerHTML = activities.slice(0, 4).map(act => `
+                    <li class="activity-item">
+                        <div class="activity-icon"><i class="fa-solid fa-clock-rotate-left"></i></div>
+                        <div>
+                            <div class="activity-text">${escapeHTML(act.description || 'Activity')}</div>
+                            <div class="activity-time">${formatBDTime(act.created_at)}</div>
+                        </div>
+                    </li>
+                `).join('');
+            } catch (e) {
+                container.innerHTML = `<li class="text-center text-danger py-3" style="font-size:12px;">Failed to load activities</li>`;
             }
         }
 
         async function loadLeaveBalance() {
             try {
-                const response = await fetch('api/leave-balance.php');
+                const response = await fetch('api/leave-balance.php', { cache: 'no-store' });
                 const data = await response.json();
                 if (data.success) {
-                    document.getElementById('leaveBalance').innerHTML = data.balance;
+                    document.getElementById('leaveBalance').textContent = data.balance ?? 0;
                 }
-            } catch(e) {
-                console.error('Error loading leave balance:', e);
+            } catch (error) { console.error('Leave load error:', error); }
+        }
+
+        async function loadRecentPayslips() {
+            const tbody = document.getElementById('payslipTableBody');
+            try {
+                const response = await fetch('api/payroll.php?my_payslips=1', { cache: 'no-store' });
+                const result = await response.json();
+                
+                if (result.success && result.data && result.data.length > 0) {
+                    const recent = result.data.slice(0, 3); 
+                    tbody.innerHTML = recent.map(p => `
+                        <tr>
+                            <td><strong>${escapeHTML(p.month_year || p.period_start)}</strong></td>
+                            <td class="text-success fw-bold">৳ ${parseFloat(p.net_salary || 0).toLocaleString()}</td>
+                            <td><span class="status-paid">Paid</span></td>
+                            <td class="text-end">
+                                <a href="api/download-payslip.php?id=${p.id}" class="btn btn-sm btn-outline-primary fw-bold" target="_blank">
+                                    <i class="fa-solid fa-download me-1"></i> PDF
+                                </a>
+                            </td>
+                        </tr>
+                    `).join('');
+                    
+                    document.getElementById('currentSalary').textContent = '৳ ' + parseFloat(recent[0].net_salary || 0).toLocaleString();
+                } else {
+                    tbody.innerHTML = `<tr><td colspan="4" class="text-center py-3 text-muted">No payslips found.</td></tr>`;
+                }
+            } catch (e) {
+                tbody.innerHTML = `<tr><td colspan="4" class="text-center text-danger">Error loading payslips.</td></tr>`;
             }
         }
 
-        // ============================================
-        // RECENT ACTIVITY
-        // ============================================
-        async function loadRecentActivity() {
+        async function loadUpcomingHolidays() {
+            const container = document.getElementById('upcomingHolidaysList');
             try {
-                const response = await fetch('api/employee-activity.php');
-                const data = await response.json();
-                const container = document.getElementById('recentActivity');
-                const countElement = document.getElementById('activityCount');
-
-                if(data.success && data.activities && data.activities.length > 0) {
-                    countElement.textContent = data.activities.length + ' activities';
-                    container.innerHTML = data.activities.map(act => {
-                        let icon = 'fa-clock';
-                        let styleClass = '';
-                        let statusBadge = '';
-
-                        if (act.type === 'attendance') {
-                            icon = 'fa-fingerprint';
-                            styleClass = 'attendance';
-                        } else if (act.type === 'leave') {
-                            if (act.description.includes('Approved')) {
-                                icon = 'fa-check-circle';
-                                styleClass = 'leave-approved';
-                                statusBadge = '<span class="activity-status-badge bg-success text-white">Approved</span>';
-                            } else if (act.description.includes('Rejected')) {
-                                icon = 'fa-times-circle';
-                                styleClass = 'leave-rejected';
-                                statusBadge = '<span class="activity-status-badge bg-danger text-white">Rejected</span>';
-                            } else {
-                                icon = 'fa-clock';
-                                styleClass = 'leave-pending';
-                                statusBadge = '<span class="activity-status-badge bg-warning text-dark">Pending</span>';
-                            }
-                        } else if (act.type === 'performance') {
-                            icon = 'fa-star';
-                            styleClass = 'performance';
-                        } else if (act.type === 'notice') {
-                            icon = 'fa-bullhorn';
-                            styleClass = 'notice';
-                        } else if (act.type === 'notification') {
-                            icon = 'fa-bell';
-                            styleClass = 'notification';
-                        }
-
+                const response = await fetch('api/holidays.php', { cache: 'no-store' });
+                const result = await response.json();
+                
+                if (result.success && result.data.length > 0) {
+                    const today = new Date();
+                    today.setHours(0,0,0,0);
+                    
+                    const upcoming = result.data.filter(h => new Date(h.start_date) >= today).slice(0, 3);
+                    
+                    if (upcoming.length === 0) {
+                        container.innerHTML = `<li class="text-center py-3 text-muted" style="font-size:12px;">No upcoming holidays.</li>`;
+                        return;
+                    }
+                    
+                    container.innerHTML = upcoming.map((h, index) => {
+                        const date = new Date(h.start_date);
+                        const dateStr = date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+                        const isLast = index === upcoming.length - 1;
+                        
                         return `
-                            <div class="activity-item ${styleClass}">
-                                <div class="d-flex align-items-center" style="flex:1;">
-                                    <span class="activity-icon">
-                                        <i class="fas ${icon}"></i>
-                                    </span>
-                                    <span class="activity-text">
-                                        ${act.description}
-                                        ${statusBadge}
-                                    </span>
-                                </div>
-                                <span class="activity-time">${act.time}</span>
-                            </div>
+                            <li class="d-flex justify-content-between ${!isLast ? 'mb-2 pb-2 border-bottom' : ''}" style="font-size: 12px;">
+                                <span class="fw-bold">${escapeHTML(h.holiday_name)}</span>
+                                <span class="text-muted">${dateStr}</span>
+                            </li>
                         `;
                     }).join('');
                 } else {
-                    countElement.textContent = '0 activities';
-                    container.innerHTML = '<p class="text-muted text-center py-3">No recent activity in the last 24 hours</p>';
+                    container.innerHTML = `<li class="text-center py-3 text-muted" style="font-size:12px;">No upcoming holidays.</li>`;
                 }
-            } catch(e) {
-                console.error('Error loading activity:', e);
-                document.getElementById('recentActivity').innerHTML = '<p class="text-muted text-center py-3">Error loading activity</p>';
+            } catch (error) {
+                console.error('Holiday load error:', error);
+                container.innerHTML = `<li class="text-center text-danger py-3" style="font-size:12px;">Failed to load holidays.</li>`;
             }
         }
 
-        // ============================================
-        // NOTIFICATIONS
-        // ============================================
         async function loadNotificationCount() {
             try {
-                const response = await fetch('api/notifications.php?count=1');
+                const response = await fetch('api/notifications.php?count=1', { cache: 'no-store' });
                 const data = await response.json();
+                const unread = Number(data.unread) || 0;
                 const badge = document.getElementById('noticeBadge');
-                if(data.success && data.unread > 0) {
-                    badge.style.display = 'inline';
-                    badge.textContent = data.unread;
-                } else {
-                    badge.style.display = 'none';
-                }
-            } catch(e) {
-                console.error('Error loading notification count:', e);
-            }
+                badge.textContent = unread;
+                badge.style.display = unread > 0 ? 'flex' : 'none';
+            } catch (error) {}
         }
 
-        async function toggleNotifications(event) {
-            event.preventDefault();
+        async function openNotifications(e) {
+            if(e) e.preventDefault();
             await loadNotifications();
             notificationModal.show();
         }
 
         async function loadNotifications() {
+            const container = document.getElementById('notificationList');
+            container.innerHTML = `<div class="text-center py-4"><i class="fa-solid fa-spinner fa-spin"></i></div>`;
             try {
-                const response = await fetch('api/notifications.php');
-                const data = await response.json();
-                const container = document.getElementById('notificationList');
+                const response = await fetch('api/notifications.php', { cache: 'no-store' });
+                const result = await response.json();
+                const notifs = result.data || [];
 
-                const badge = document.getElementById('noticeBadge');
-                if(data.success && data.unread > 0) {
-                    badge.style.display = 'inline';
-                    badge.textContent = data.unread;
-                } else {
-                    badge.style.display = 'none';
+                if (notifs.length === 0) {
+                    container.innerHTML = `<div class="text-center py-5 text-muted"><i class="fa-regular fa-bell-slash fs-1 mb-3"></i><h6 class="fw-bold">All caught up!</h6></div>`;
+                    return;
                 }
 
-                if(data.success && data.data && data.data.length > 0) {
-                    container.innerHTML = data.data.map(n => {
-                        let isRead = n.is_read ? 'read' : 'unread';
-                        let icon = 'fa-info-circle';
-                        let iconColor = '#2c5aa0';
-                        let styleClass = 'info';
-
-                        if (n.type === 'info') {
-                            icon = 'fa-info-circle';
-                            iconColor = '#2c5aa0';
-                            styleClass = 'info';
-                        } else if (n.type === 'success') {
-                            icon = 'fa-check-circle';
-                            iconColor = '#28a745';
-                            styleClass = 'success';
-                        } else if (n.type === 'danger') {
-                            icon = 'fa-exclamation-circle';
-                            iconColor = '#dc3545';
-                            styleClass = 'danger';
-                        } else if (n.type === 'warning') {
-                            icon = 'fa-exclamation-triangle';
-                            iconColor = '#ffc107';
-                            styleClass = 'warning';
-                        }
-
-                        if (n.title.includes('Leave')) {
-                            if (n.message.includes('approved')) {
-                                styleClass = 'leave-approved';
-                            } else if (n.message.includes('rejected')) {
-                                styleClass = 'leave-rejected';
-                            } else {
-                                styleClass = 'leave-pending';
-                            }
-                        }
-
-                        return `
-                            <div class="notification-item ${isRead} ${styleClass}" onclick="markAsRead(${n.id})">
-                                <div class="d-flex align-items-start">
-                                    <span class="notification-icon-modal">
-                                        <i class="fas ${icon}" style="color: ${iconColor};"></i>
-                                    </span>
-                                    <div class="flex-grow-1">
-                                        <strong>${n.title}</strong>
-                                        <p class="mb-0">${n.message}</p>
-                                        <small class="notification-time">${new Date(n.created_at).toLocaleString()}</small>
-                                    </div>
-                                    ${!n.is_read ? '<span class="badge bg-primary ms-2">New</span>' : ''}
+                container.innerHTML = notifs.map(n => {
+                    const unread = Number(n.is_read) === 0;
+                    const icon = n.type === 'success' ? 'fa-circle-check text-success' : (n.type === 'danger' ? 'fa-circle-exclamation text-danger' : 'fa-circle-info text-primary');
+                    return `
+                        <div class="notification-item ${unread ? 'unread' : ''} mb-2" onclick="markAsRead(${n.id})" style="padding:12px; border:1px solid ${unread ? '#bfdbfe' : '#e2e8f0'}; border-radius:8px; background:${unread ? '#eff6ff' : '#fff'}; cursor:pointer;">
+                            <div class="d-flex align-items-start gap-2">
+                                <i class="fa-solid ${icon} mt-1"></i>
+                                <div>
+                                    <div class="fw-bold text-dark" style="font-size:13px;">${escapeHTML(n.title)}</div>
+                                    <div class="text-muted" style="font-size:12px;">${escapeHTML(n.message)}</div>
+                                    <div class="text-secondary" style="font-size:10px; margin-top:4px;">${formatBDTime(n.created_at)}</div>
                                 </div>
                             </div>
-                        `;
-                    }).join('');
-                } else {
-                    container.innerHTML = `
-                        <div class="text-center py-5">
-                            <i class="fas fa-bell-slash" style="font-size: 48px; color: #dee2e6;"></i>
-                            <p class="text-muted mt-3">No notifications</p>
                         </div>
                     `;
-                }
-            } catch(e) {
-                console.error('Error loading notifications:', e);
-                document.getElementById('notificationList').innerHTML = '<p class="text-muted text-center py-3">Error loading notifications</p>';
-            }
+                }).join('');
+            } catch (error) { container.innerHTML = '<p class="text-danger text-center">Error loading.</p>'; }
         }
 
         async function markAsRead(id) {
             try {
                 await fetch('api/notifications.php', {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id: id })
+                    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id })
                 });
-                await loadNotifications();
-                await loadNotificationCount();
-            } catch(e) {
-                console.error('Error marking as read:', e);
-            }
+                await loadNotifications(); await loadNotificationCount();
+            } catch (error) {}
         }
 
         async function markAllAsReadAndClose() {
             try {
                 await fetch('api/notifications.php', {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id: 0 })
+                    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: 0 })
                 });
-                await loadNotifications();
-                await loadNotificationCount();
-                notificationModal.hide();
-            } catch(e) {
-                console.error('Error marking all as read:', e);
-            }
+                await loadNotifications(); await loadNotificationCount(); notificationModal.hide();
+            } catch (error) {}
         }
 
-        // ============================================
-        // START REALTIME UPDATES
-        // ============================================
-        function startRealtimeUpdates() { 
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('active');
+            document.getElementById('mobileOverlay').classList.toggle('active');
+        }
+        function scrollToAttendance(e) {
+            e.preventDefault();
+            document.getElementById('attendanceSection').scrollIntoView({ behavior: 'smooth' });
+            document.getElementById('sidebar').classList.remove('active');
+            document.getElementById('mobileOverlay').classList.remove('active');
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            notificationModal = new bootstrap.Modal(document.getElementById('notificationModal'));
+            calendarModal = new bootstrap.Modal(document.getElementById('calendarModal'));
+            
+            updateClock();
+            setInterval(updateClock, 1000);
+            
+            const addBtn = document.getElementById('addNoteBtn');
+            const clearBtn = document.getElementById('clearHistoryBtn');
+            const noteInput = document.getElementById('newNoteInput');
+
+            if(addBtn) addBtn.addEventListener('click', addNote);
+            if(clearBtn) clearBtn.addEventListener('click', clearNotesHistory);
+            if(noteInput) {
+                noteInput.addEventListener('keypress', function (e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        addNote();
+                    }
+                });
+            }
+
+            loadNotesHistory(); 
+
             loadDashboardData();
             loadLeaveBalance();
             loadRecentActivity();
             loadNotificationCount();
-            realtimeInterval = setInterval(() => {
-                loadDashboardData();
-                loadLeaveBalance();
-                loadRecentActivity();
-                loadNotificationCount();
-            }, 5000);
-        }
+            loadRecentPayslips();
+            loadUpcomingHolidays();
 
-        startRealtimeUpdates();
+            realtimeInterval = setInterval(() => {
+                loadDashboardData(); 
+                loadLeaveBalance(); 
+                loadRecentActivity(); 
+                loadNotificationCount();
+            }, 15000);
+        });
+        
+        window.addEventListener('beforeunload', () => clearInterval(realtimeInterval));
     </script>
 </body>
 </html>

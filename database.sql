@@ -1,19 +1,4 @@
--- MariaDB dump 10.19  Distrib 10.4.32-MariaDB, for Linux (x86_64)
---
--- Host: localhost    Database: kormoshathi
--- ------------------------------------------------------
--- Server version	10.4.32-MariaDB
-
-/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
-/*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
-/*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
-/*!40101 SET NAMES utf8mb4 */;
-/*!40103 SET @OLD_TIME_ZONE=@@TIME_ZONE */;
-/*!40103 SET TIME_ZONE='+00:00' */;
-/*!40014 SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0 */;
-/*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;
-/*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
-/*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
+SET FOREIGN_KEY_CHECKS=0;
 
 --
 -- Table structure for table `activity_logs`
@@ -654,14 +639,7 @@ LOCK TABLES `users` WRITE;
 INSERT INTO `users` VALUES (1,'HR001','Admin','KormoShathi','admin@kormoshathi.com',NULL,'$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi','hr',NULL,NULL,0.00,'active','2026-06-13','2026-06-13 11:18:06','2026-06-13 11:18:06',NULL,20,NULL,NULL,NULL,NULL),(4,'HR20266892','rahim','molla','abc@gmail.com','01727243306','$2y$10$GxG8rl71nQMWRObkOQV9QuHafrqpyNxpSyMwMFe69iDZTCr778bu2','hr','HR','junior soft',0.00,'active','2026-06-13','2026-06-13 14:55:25','2026-06-13 14:55:25',NULL,20,NULL,NULL,NULL,NULL),(6,'EMP20269107','shamim','reja','shamim123@gmail.com','019552826095','$2y$10$WpnIgrtTXdX1ihqUrIv8Zu0eVNexqZYaKQEVTH/mNgdgZdP/EVTxK','employee','IT','junior soft',0.00,'active','2026-06-13','2026-06-13 17:32:10','2026-06-29 15:20:18','uploads/user_6_1782211085.png',15,NULL,NULL,NULL,NULL),(7,'HR20268955','Abdul','Alim','abdulalim528260@gmail.com','01704281617','$2y$10$h10jZVsjI/.WD8OFbFHJ4eL4gJl3bIKdEm.gjUSdEdQtWWkDS88Ii','hr','HR','Developer',0.00,'active','2026-06-13','2026-06-13 17:37:52','2026-06-26 02:56:26','uploads/user_7_1782442586.jpeg',20,NULL,NULL,NULL,NULL),(8,'HR20268487','Abdul','Alim','abdulalim52826095@gmail.com','01704281617','$2y$10$TE0m6e/D3UtkICRv.xzr6uH.kU4IbEStuxofTBOCYK/UP4jpRaefK','hr','HR','junior soft',0.00,'active','2026-06-15','2026-06-15 05:59:25','2026-06-15 05:59:25',NULL,20,NULL,NULL,NULL,NULL),(13,'EMP20267230','summa','khatun','summa123@kormoshathigmail.com','0198923123','$2y$10$bwcDAuH/5JnzXzgfWUVareZ4b.65Qyj.wWP9rf6.hyXkABK5CRlxi','employee','Marketing','salse',5.00,'active','2026-06-14','2026-06-15 09:30:11','2026-06-15 10:11:00',NULL,20,NULL,NULL,NULL,NULL),(14,'EMP20261481','as','df','aadff1232@GMAIL.COM','01922863522','$2y$10$0GVKfyVDh2Ehl16rBJeJPekluOezhNtc.Uf0F1VP/rbcvZdoHkHQC','employee','Marketing','Developer',1500.00,'active','2026-06-15','2026-06-15 10:13:18','2026-06-15 10:25:34',NULL,20,NULL,NULL,NULL,NULL),(15,'EMP20268837','Azizul','Haque','azizulhaque123@gmail.com','01717969451','$2y$10$FtuQ.M2gOl.Jb/D69QO6jOTKtWUK9BoDFrQ9K8iPHfg3zUvhTtIni','employee','HR','Developer',0.00,'active','2026-06-15','2026-06-15 14:29:40','2026-06-22 04:14:14',NULL,14,NULL,NULL,NULL,NULL),(16,'HR20265994','Alim','biswas','alimbiswas@gmail.com','+8801957123090','$2y$10$COjePkQECbDNgdWloETyA.ucwqpW2nZ/3L.05Y8uDpaQOtIu2gKsW','hr','HR','Developer',0.00,'active','2026-06-22','2026-06-22 03:10:28','2026-06-22 03:10:28',NULL,20,NULL,NULL,NULL,NULL),(17,'EMP20269770','sumon','alim','sumonalim123@gmail.com','01704281617','$2y$10$3zHewRXdUMHbG9.2r9M5HOpwMWGAh7g.q8zsahVjzPjquKLgWEEjq','employee','Marketing','Developer',15000.00,'active','2026-06-22','2026-06-22 03:19:32','2026-06-22 03:19:32',NULL,20,NULL,NULL,NULL,NULL),(18,'EMP20266655','md.nazmul','islam','nazmul.kormoshathi@gmail.com','01725826095','$2y$10$Z9RZxF460sxE6Tfhr2A44uq8q0078bTb9nJ3qCgqA18NDq7wElLvq','employee','Finance','senior officer',20000.00,'active','2026-06-24','2026-06-24 08:25:42','2026-06-24 08:25:42',NULL,20,NULL,NULL,NULL,NULL),(21,'HR20267279','jannatul ','ferdouse','jannatul.kormosathe@gmail.com','019999043586','$2y$10$pWjegDPBNkY4St.r1Wq/DOSQ49JnZYp6SB8y5XWHE81Z2fTJd3k1i','hr','Operations','Developer',120000.00,'active','2026-06-24','2026-06-24 09:28:13','2026-06-24 09:28:13',NULL,20,NULL,NULL,NULL,NULL),(22,'HR20269988','synthia','ferdouse','shnthia.kormosathe@gmail.com','01957123090','$2y$10$lMJfLC.A7XE5zqkCI4M9bu28vY.KFlg0WdFvceHZGnTJMPQUmknr2','hr','HR','Developer',120000.00,'active','2026-06-24','2026-06-24 09:30:24','2026-06-24 09:30:24',NULL,20,NULL,NULL,NULL,NULL),(23,'EMP20263352','alim','vai','alim.kormoshathi123@gmail.com','01704281617','$2y$10$kubdmy3q2frT02yxRXuipO.nZSOQXko3iTbOBNPCxphESxLWMvQxm','employee','IT','Developer',15000.00,'active','2026-06-25','2026-06-24 09:32:33','2026-06-24 09:32:33',NULL,20,NULL,NULL,NULL,NULL),(24,'EMP20268919','JEBUN','NESA','JEBUN.KORMOSHATHI123@GMAIL.COM','01922869522','$2y$10$yPrP19NN/r4f3gmGMPtmJ.RqiH9TwJEus/fPh4cokkmLwZZwrw7.i','employee','Marketing','salse',200000.00,'active','2026-06-24','2026-06-24 09:34:10','2026-06-24 09:34:10',NULL,20,NULL,NULL,NULL,NULL),(25,'HR20262203','JEBUN','NESA','jebunnesa@gmail.com','01957123090','$2y$10$56qfD1tEOtibpHBLWNFtue4oG9X4fLcbyg4JBeOFzGsfqrgEuMyVO','hr','Sales','Developer',120000.00,'active','2026-06-24','2026-06-24 09:35:19','2026-06-24 09:35:19',NULL,20,NULL,NULL,NULL,NULL),(26,'HR20266939','synthia ','ferdouse','synthiaferdouse.kormoshathi@gmail.com','019999043586','$2y$10$WwHt1QcHVajz3I0qIhv8S.mO7IgL1mJp/wqI4Nxvsogipq/q0uJwe','hr','HR','senior officer',12.00,'active','2026-06-24','2026-06-24 09:36:53','2026-06-24 09:36:53',NULL,20,NULL,NULL,NULL,NULL),(27,'EMP20265049','adu','vai','aduvai.kormoshathi@gmail.com','01650242904','$2y$10$T2uyRuq.iknGrnrEWWM09eRvRsILMUp8m56BNKLP5hE4L65ecUBqm','employee','Sales','senior officer',120000.00,'active','2026-06-30','2026-06-30 02:31:05','2026-06-30 03:28:32','uploads/user_27_1782787044.jpg',20,NULL,NULL,NULL,NULL);
 /*!40000 ALTER TABLE `users` ENABLE KEYS */;
 UNLOCK TABLES;
-/*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
-/*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
-/*!40014 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS */;
-/*!40014 SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS */;
-/*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
-/*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
-/*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
-/*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
 -- Dump completed on 2026-07-10 16:40:44
+SET FOREIGN_KEY_CHECKS=1;

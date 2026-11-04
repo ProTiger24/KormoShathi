@@ -1,14 +1,17 @@
 <?php
 header("Content-Type: application/json");
 session_start();
+
+// কনফিগারেশন ফাইল যুক্ত করা হলো
 require_once '../config/database.php';
 require_once '../config/email_config.php';
 
-// Enable error reporting
+// এরর লগিং চালু
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
+ini_set('log_errors', 1);
+ini_set('error_log', '../error.log'); // এরর লগ ফাইল
 
-// Check session
 if (!isset($_SESSION['user_id']) || $_SESSION['user_type'] !== 'hr') {
     echo json_encode(['success' => false, 'message' => 'Unauthorized']);
     exit;
@@ -17,7 +20,6 @@ if (!isset($_SESSION['user_id']) || $_SESSION['user_type'] !== 'hr') {
 $db = (new Database())->getConnection();
 $input = json_decode(file_get_contents('php://input'), true);
 
-// Log input
 error_log("send-interview.php Input: " . print_r($input, true));
 
 $result_ids = $input['result_ids'] ?? [];
@@ -45,16 +47,17 @@ foreach ($result_ids as $result_id) {
     if ($c) {
         $subject = "📅 Interview Call - KormoShathi";
         
+        // আপনার আগের সুন্দর HTML ইমেইল টেম্পলেটটি এখানে ব্যবহার করা হলো
         $body = "
         <html>
         <head>
             <style>
                 body { font-family: Arial, sans-serif; }
                 .container { max-width: 600px; margin: auto; padding: 20px; }
-                .header { background: #28a745; color: white; padding: 20px; text-align: center; }
-                .content { padding: 20px; background: #f9f9f9; }
-                .footer { background: #eee; padding: 10px; text-align: center; font-size: 12px; }
-                .details { background: white; padding: 15px; border-radius: 5px; margin: 10px 0; }
+                .header { background: #356df3; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+                .content { padding: 20px; background: #f9f9f9; border: 1px solid #eee; }
+                .footer { background: #eee; padding: 10px; text-align: center; font-size: 12px; border-radius: 0 0 8px 8px; }
+                .details { background: white; padding: 15px; border-radius: 5px; margin: 10px 0; border-left: 4px solid #356df3; }
             </style>
         </head>
         <body>
@@ -81,7 +84,7 @@ foreach ($result_ids as $result_id) {
                     <p><strong>$interviewer_name</strong><br>HR Team - KormoShathi</p>
                 </div>
                 <div class='footer'>
-                    <p>&copy; 2026 KormoShathi. All rights reserved.</p>
+                    <p>&copy; " . date('Y') . " KormoShathi. All rights reserved.</p>
                 </div>
             </div>
         </body>
@@ -90,9 +93,11 @@ foreach ($result_ids as $result_id) {
         
         error_log("📧 Sending interview email to: " . $c['candidate_email']);
         
+        // এখানে নতুন sendEmail() ফাংশনটি ব্যবহার করা হলো (যা Brevo API দিয়ে কাজ করে)
         $email_sent = sendEmail($c['candidate_email'], $subject, $body);
         
         if ($email_sent) {
+            // আপনার আগের কোডের মতো interview_sent = 1 আপডেট করা হলো
             $stmt = $db->prepare("UPDATE ai_screening_results SET status = 'interview_scheduled', interview_sent = 1 WHERE id = ?");
             $stmt->execute([$result_id]);
             $sent++;

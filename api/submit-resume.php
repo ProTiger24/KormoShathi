@@ -1,296 +1,215 @@
 <?php
 header("Content-Type: application/json");
-require_once '../config/database.php';
-require_once '../config/ai_config.php';
-require_once '../config/email_config.php';
-require_once '../vendor/autoload.php';
+session_start();
+
+require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../vendor/autoload.php';
+require_once __DIR__ . '/../config/email_config.php';
 
 use Smalot\PdfParser\Parser;
 
-$db = (new Database())->getConnection();
+error_reporting(E_ALL);
+ini_set('display_errors', 0);
 
-$name = $_POST['name'] ?? '';
-$email = $_POST['email'] ?? '';
-$phone = $_POST['phone'] ?? '';
-
-if (empty($name) || empty($email)) {
-    echo json_encode(['success' => false, 'message' => 'Name and email required']);
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    http_response_code(405);
+    echo json_encode(['success' => false, 'message' => 'Invalid request method.']);
     exit;
 }
 
-// Get active screening config
-$stmt = $db->prepare("SELECT * FROM ai_screening_config 
-                       WHERE is_active = 1 
-                       AND start_date <= CURDATE() 
-                       AND end_date >= CURDATE() 
-                       ORDER BY id DESC 
-                       LIMIT 1");
-$stmt->execute();
-$config = $stmt->fetch(PDO::FETCH_ASSOC);
-
-if (!$config) {
-    echo json_encode(['success' => false, 'message' => 'No active job openings']);
-    exit;
-}
-
-// Handle file upload
-$resume_text = '';
-$file_path = '';
-
-if (isset($_FILES['resume']) && $_FILES['resume']['error'] === UPLOAD_ERR_OK) {
-    $upload_dir = '../uploads/resumes/';
-    if (!is_dir($upload_dir)) mkdir($upload_dir, 0777, true);
-    
-    $file_name = time() . '_' . basename($_FILES['resume']['name']);
-    $file_path = 'uploads/resumes/' . $file_name;
-    $full_path = '../' . $file_path;
-    move_uploaded_file($_FILES['resume']['tmp_name'], $full_path);
-    
-    $resume_text = extractResumeText($full_path);
-    
-    if (empty($resume_text) || strlen($resume_text) < 20) {
-        $resume_text = "Candidate: $name, Email: $email";
-    }
-} else {
-    echo json_encode(['success' => false, 'message' => 'Resume file required']);
-    exit;
-}
-
-// Insert into database
 try {
-    $stmt = $db->prepare("INSERT INTO ai_screening_results 
-                          (config_id, candidate_name, candidate_email, candidate_phone, 
-                           resume_text, resume_file_path, status) 
-                          VALUES (?, ?, ?, ?, ?, ?, 'pending')");
-    $stmt->execute([
-        $config['id'], 
-        $name, 
-        $email, 
-        $phone, 
-        $resume_text, 
-        $file_path
-    ]);
-    $result_id = $db->lastInsertId();
-} catch(Exception $e) {
-    echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
-    exit;
-}
+    $db = (new Database())->getConnection();
 
-// 📧 Send Confirmation Email
-$subject = "📄 Resume Received - KormoShathi";
-$body = "
-<html>
-<head>
-    <style>
-        body { font-family: Arial, sans-serif; }
-        .container { max-width: 600px; margin: auto; padding: 20px; }
-        .header { background: #2c5aa0; color: white; padding: 20px; text-align: center; }
-        .content { padding: 20px; background: #f9f9f9; }
-        .footer { background: #eee; padding: 10px; text-align: center; font-size: 12px; }
-    </style>
-</head>
-<body>
-    <div class='container'>
-        <div class='header'>
-            <h2>📄 Resume Received</h2>
-        </div>
-        <div class='content'>
-            <p>Dear <strong>$name</strong>,</p>
-            <p>Thank you for submitting your resume for the position of <strong>{$config['job_title']}</strong>.</p>
-            <p>We have received your application and our AI system is reviewing it.</p>
-            <p>You will be notified about the next steps soon.</p>
-            <br>
-            <p>Best regards,</p>
-            <p><strong>HR Team - KormoShathi</strong></p>
-        </div>
-        <div class='footer'>
-            <p>&copy; 2026 KormoShathi. All rights reserved.</p>
-        </div>
-    </div>
-</body>
-</html>
-";
+    // ==========================================
+    // FORM DATA
+    // ==========================================
+    $name = trim($_POST['name'] ?? $_POST['full_name'] ?? '');
+    $email = trim($_POST['email'] ?? '');
+    $phone = trim($_POST['phone'] ?? '');
+    $config_id = (int)($_POST['config_id'] ?? 1);
 
-$email_sent = sendEmail($email, $subject, $body);
-if ($email_sent) {
-    error_log("✅ Confirmation email sent to: $email");
-} else {
-    error_log("❌ Failed to send confirmation email to: $email");
-}
-
-// 🤖 AI Screening with Groq
-$ai_result = screenResumeWithGroq($resume_text, $config);
-
-if ($ai_result && isset($ai_result['match_score']) && $ai_result['match_score'] > 0) {
-    // 🔥 Fix: Convert skills array to string if needed
-    $skills_found = $ai_result['skills_found'] ?? '';
-    if (is_array($skills_found)) {
-        $skills_found = implode(', ', $skills_found);
+    if (empty($name) || empty($email)) {
+        echo json_encode(['success' => false, 'message' => 'Name and Email are required.']);
+        exit;
     }
-    $missing_skills = $ai_result['missing_skills'] ?? '';
-    if (is_array($missing_skills)) {
-        $missing_skills = implode(', ', $missing_skills);
+
+    // ==========================================
+    // RESUME FILE UPLOAD
+    // ==========================================
+    if (!isset($_FILES['resume']) || $_FILES['resume']['error'] !== UPLOAD_ERR_OK) {
+        echo json_encode(['success' => false, 'message' => 'Resume file is required.']);
+        exit;
     }
-    $priority_skills = $ai_result['priority_skills_found'] ?? '';
-    if (is_array($priority_skills)) {
-        $priority_skills = implode(', ', $priority_skills);
+
+    $upload_dir = __DIR__ . '/../uploads/resumes/';
+    if (!is_dir($upload_dir)) { mkdir($upload_dir, 0755, true); }
+
+    $original_name = basename($_FILES['resume']['name']);
+    $extension = strtolower(pathinfo($original_name, PATHINFO_EXTENSION));
+
+    if ($extension !== 'pdf') {
+        echo json_encode(['success' => false, 'message' => 'Only PDF resumes are allowed.']);
+        exit;
     }
-    
-    $stmt = $db->prepare("UPDATE ai_screening_results 
-                          SET match_score = ?, skills_found = ?, missing_skills = ?, 
-                              priority_skills_found = ?, summary = ?, recommendation = ?,
-                              status = 'screened'
-                          WHERE id = ?");
-    $stmt->execute([
-        $ai_result['match_score'] ?? 0,
-        $skills_found,
-        $missing_skills,
-        $priority_skills,
-        $ai_result['summary'] ?? '',
-        $ai_result['recommendation'] ?? 'review',
-        $result_id
-    ]);
-    $match_score = $ai_result['match_score'];
-    $recommendation = $ai_result['recommendation'];
-    error_log("✅ AI Success: Score=$match_score, Skills=$skills_found");
-} else {
-    $score = calculateManualScore($resume_text, $config);
-    $recommendation = $score >= 80 ? 'shortlist' : ($score >= 40 ? 'review' : 'reject');
-    
-    $stmt = $db->prepare("UPDATE ai_screening_results 
-                          SET match_score = ?, 
-                              skills_found = ?,
-                              summary = 'Manual calculation',
-                              recommendation = ?,
-                              status = 'screened'
-                          WHERE id = ?");
-    $stmt->execute([
-        $score, 
-        $config['required_skills'] ?? '', 
-        $recommendation, 
-        $result_id
-    ]);
-    $match_score = $score;
-    error_log("⚠️ Manual: Score=$score, Recommendation=$recommendation");
-}
 
-echo json_encode([
-    'success' => true, 
-    'message' => 'Resume submitted and screened!',
-    'match_score' => $match_score ?? 0,
-    'recommendation' => $recommendation ?? 'review'
-]);
+    $file_name = uniqid('resume_', true) . '.pdf';
+    $target_file = $upload_dir . $file_name;
 
-// ============================================
-// 📄 Extract Resume Text
-// ============================================
-function extractResumeText($file_path) {
-    $ext = strtolower(pathinfo($file_path, PATHINFO_EXTENSION));
-    $text = '';
-    
-    if ($ext === 'txt') {
-        $text = file_get_contents($file_path);
-    } 
-    elseif ($ext === 'pdf') {
-        try {
-            $parser = new Parser();
-            $pdf = $parser->parseFile($file_path);
-            $text = $pdf->getText();
-        } catch(Exception $e) {
-            $text = "PDF: " . basename($file_path);
-        }
-    } 
-    elseif ($ext === 'docx') {
-        $zip = new ZipArchive();
-        if ($zip->open($file_path) === true) {
-            $xml = $zip->getFromName('word/document.xml');
-            if ($xml) {
-                $text = strip_tags($xml);
-                $text = preg_replace('/\s+/', ' ', $text);
-            }
-            $zip->close();
-        }
+    if (!move_uploaded_file($_FILES['resume']['tmp_name'], $target_file)) {
+        echo json_encode(['success' => false, 'message' => 'Failed to upload resume.']);
+        exit;
     }
-    
-    return $text ?: "Resume from " . basename($file_path);
-}
 
-function calculateManualScore($resume_text, $config) {
-    $required = strtolower($config['required_skills'] ?? '');
-    $skills = array_filter(array_map('trim', explode(',', $required)));
-    $text_lower = strtolower($resume_text);
-    
-    if (empty($skills)) return 50;
-    
-    $found = 0;
-    foreach ($skills as $skill) {
-        if (strpos($text_lower, $skill) !== false) $found++;
-    }
-    
-    return round(($found / count($skills)) * 100);
-}
+    $resume_path = 'uploads/resumes/' . $file_name;
 
-function screenResumeWithGroq($resume_text, $config) {
-    $api_key = AI_API_KEY;
-    $url = AI_API_URL;
-    
-    $required_skills = $config['required_skills'] ?? '';
-    $job_title = $config['job_title'] ?? 'Job';
-    
-    $prompt = "Analyze this resume. Job: $job_title. Required Skills: $required_skills.
+    // ==========================================
+    // AI SCREENING CONFIGURATION
+    // ==========================================
+    $stmt = $db->prepare("SELECT required_skills, job_title FROM ai_screening_config WHERE id = ?");
+    $stmt->execute([$config_id]);
+    $job = $stmt->fetch(PDO::FETCH_ASSOC);
 
-Resume: " . substr($resume_text, 0, 3000) . "
+    $required_skills = $job ? $job['required_skills'] : 'PHP, MySQL, JavaScript';
+    $job_title = $job ? $job['job_title'] : 'Software Engineer';
 
-Return ONLY JSON:
-{
-    \"match_score\": 85,
-    \"skills_found\": \"PHP, Laravel, MySQL, JavaScript\",
-    \"missing_skills\": \"Docker, AWS\",
-    \"priority_skills_found\": \"Laravel, MySQL\",
-    \"summary\": \"Strong candidate with relevant skills\",
-    \"recommendation\": \"shortlist\"
-}";
-
-    $data = [
-        'model' => AI_MODEL,
-        'messages' => [
-            ['role' => 'system', 'content' => 'Return only valid JSON. Skills should be comma separated strings, not arrays.'],
-            ['role' => 'user', 'content' => $prompt]
-        ],
-        'temperature' => 0.3,
-        'max_tokens' => 500
-    ];
-    
-    $ch = curl_init($url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        'Content-Type: application/json',
-        'Authorization: Bearer ' . $api_key
-    ]);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
-    curl_setopt($ch, CURLOPT_TIMEOUT, 60);
-    
-    $response = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-    
-    if ($httpCode == 200) {
-        $result = json_decode($response, true);
-        $content = $result['choices'][0]['message']['content'] ?? '';
-        $content = trim($content);
-        $content = preg_replace('/^```json\s*/', '', $content);
-        $content = preg_replace('/^```\s*/', '', $content);
-        $content = preg_replace('/```\s*$/', '', $content);
+    // ==========================================
+    // PDF TEXT EXTRACTION
+    // ==========================================
+    $resume_text = '';
+    try {
+        $parser = new Parser();
+        $pdf = $parser->parseFile($target_file);
+        $resume_text = $pdf->getText();
         
-        $json_start = strpos($content, '{');
-        $json_end = strrpos($content, '}');
-        if ($json_start !== false && $json_end !== false) {
-            $json = substr($content, $json_start, $json_end - $json_start + 1);
-            return json_decode($json, true);
-        }
+        // টেক্সট পরিষ্কার (শুধু কন্ট্রোল ক্যারেক্টার রিমুভ, ইউনিকোড রাখা হলো)
+        $resume_text = mb_convert_encoding($resume_text, 'UTF-8', 'UTF-8');
+        $resume_text = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F]/', '', $resume_text);
+        $resume_text = trim($resume_text);
+        
+        error_log("PDF Text Length: " . strlen($resume_text));
+    } catch (Throwable $e) {
+        error_log("PDF Parsing Error: " . $e->getMessage());
     }
-    
-    return null;
+
+    // ==========================================
+    // GROQ AI RESUME ANALYSIS
+    // ==========================================
+    $api_key = getEnvValue('GROQ_API_KEY');
+
+    $score = 50;
+    $recommendation = 'review';
+    $skills_found = 'None detected';
+    $education = 'Not specified';
+    $experience = 'Not specified';
+
+    if (!empty($api_key) && !empty($resume_text)) {
+        $prompt = "You are an expert HR AI. Analyze the following resume text for the job role: '$job_title'.\n" .
+                  "Required Skills: $required_skills.\n\n" .
+                  "Output a raw JSON object (no markdown, no extra text) with exactly these 5 keys:\n" .
+                  "1. 'score': Integer (0-100) evaluating how well the resume matches the job.\n" .
+                  "2. 'recommendation': String ('shortlist' if score >= 80, 'review' if 40-79, 'reject' if < 40).\n" .
+                  "3. 'skills_found': String of comma-separated matched skills.\n" .
+                  "4. 'education': String (highest degree found).\n" .
+                  "5. 'experience': String (total years found).\n\n" .
+                  "Resume Text:\n" . substr($resume_text, 0, 4000);
+
+        $data = [
+            'model' => 'openai/gpt-oss-120b',
+            'messages' => [['role' => 'user', 'content' => $prompt]],
+            'temperature' => 0.1,
+            'response_format' => ['type' => 'json_object']
+        ];
+
+        $json_payload = json_encode($data, JSON_INVALID_UTF8_SUBSTITUTE | JSON_UNESCAPED_UNICODE);
+
+        if ($json_payload === false) {
+            error_log("JSON Encode Error: " . json_last_error_msg());
+            $skills_found = 'JSON Error in PHP';
+        } else {
+            $ch = curl_init('https://api.groq.com/openai/v1/chat/completions');
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_POST => true,
+                CURLOPT_POSTFIELDS => $json_payload,
+                CURLOPT_HTTPHEADER => [
+                    'Content-Type: application/json',
+                    'Authorization: Bearer ' . $api_key
+                ],
+                CURLOPT_TIMEOUT => 30
+            ]);
+
+            $response = curl_exec($ch);
+            $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $curl_error = curl_error($ch);
+            
+            error_log("Groq API HTTP Code: " . $http_code);
+            error_log("Groq API Raw Response: " . $response);
+
+            if ($response !== false && $http_code >= 200 && $http_code < 300) {
+                $ai_result = json_decode($response, true);
+                $ai_content = $ai_result['choices'][0]['message']['content'] ?? '';
+                
+                $ai_content = str_replace(['```json', '```'], '', $ai_content);
+                $parsed = json_decode(trim($ai_content), true);
+
+                if (is_array($parsed)) {
+                    $score = max(0, min(100, (int)($parsed['score'] ?? 50)));
+                    $recommendation = $score >= 80 ? 'shortlist' : ($score < 40 ? 'reject' : 'review');
+                    $skills_found = $parsed['skills_found'] ?? 'None detected';
+                    $education = $parsed['education'] ?? 'Not specified';
+                    $experience = $parsed['experience'] ?? 'Not specified';
+                } else {
+                    error_log("Failed to parse AI JSON: " . $ai_content);
+                }
+            } else {
+                error_log("Groq API Error: HTTP $http_code | $curl_error");
+            }
+        }
+    } else {
+        error_log("Missing API Key or Empty Resume Text.");
+    }
+
+    // ==========================================
+    // 🟢 SAVE SCREENING RESULT (resume_text সহ)
+    // ==========================================
+    $stmt = $db->prepare("
+        INSERT INTO ai_screening_results
+        (config_id, candidate_name, candidate_email, phone, resume_path, resume_text, match_score, recommendation, skills_found, education, experience, status, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW())
+    ");
+
+    $stmt->execute([
+        $config_id, $name, $email, $phone, $resume_path, $resume_text, $score, $recommendation, $skills_found, $education, $experience
+    ]);
+
+    // ==========================================
+    // EMAIL NOTIFICATIONS
+    // ==========================================
+    $safe_name = htmlspecialchars($name, ENT_QUOTES, 'UTF-8');
+    $safe_job_title = htmlspecialchars($job_title, ENT_QUOTES, 'UTF-8');
+
+    $confirm_subject = "Application Received - $job_title";
+    $confirm_body = "<div style='font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:20px;'><h2 style='color:#356df3;'>Thank you for applying!</h2><p>Dear <b>$safe_name</b>,</p><p>We have received your resume for the position of <b>$safe_job_title</b>.</p><p>We will get back to you shortly.</p><br><p>Best Regards,<br>HR Team - KormoShathi</p></div>";
+    sendEmail($email, $confirm_subject, $confirm_body);
+
+    if ($score >= 80) {
+        $subject = "Interview Invitation - $job_title";
+        $body = "<div style='font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:20px;'><h2 style='color:#10b981;'>Congratulations!</h2><p>Dear <b>$safe_name</b>,</p><p>Your profile is an excellent match for <b>$safe_job_title</b>.</p><p>We would like to invite you for an interview.</p><br><p>Best Regards,<br>HR Team - KormoShathi</p></div>";
+        sendEmail($email, $subject, $body);
+    } elseif ($score < 40) {
+        $subject = "Application Update - $job_title";
+        $body = "<div style='font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:20px;'><h2 style='color:#ef4444;'>Application Update</h2><p>Dear <b>$safe_name</b>,</p><p>Thank you for applying for <b>$safe_job_title</b>.</p><p>After reviewing your resume, we found that your current profile does not sufficiently match the requirements for this specific role.</p><p>We wish you the best in your future endeavors.</p><br><p>Best Regards,<br>HR Team - KormoShathi</p></div>";
+        sendEmail($email, $subject, $body);
+    }
+
+    echo json_encode([
+        'success' => true,
+        'message' => 'Resume submitted and analyzed successfully.',
+        'data' => ['score' => $score, 'recommendation' => $recommendation]
+    ]);
+
+} catch (Throwable $e) {
+    error_log("Resume Submission Error: " . $e->getMessage());
+    http_response_code(500);
+    echo json_encode(['success' => false, 'message' => 'Something went wrong while processing your resume.']);
 }
-?>

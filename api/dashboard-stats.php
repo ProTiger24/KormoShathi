@@ -14,37 +14,35 @@ $database = new Database();
 $db = $database->getConnection();
 
 try {
-    // Total employees
-    $stmt = $db->prepare("SELECT COUNT(*) as total FROM users WHERE user_type = 'employee' AND status = 'active'");
-    $stmt->execute();
-    $totalEmployees = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
-    
-    // Today's present attendance
+    // KPI Data
+    $totalEmployees = $db->query("SELECT COUNT(*) as total FROM users WHERE user_type = 'employee' AND status = 'active'")->fetch(PDO::FETCH_ASSOC)['total'] ?? 0;
     $today = date('Y-m-d');
-    $stmt = $db->prepare("SELECT COUNT(DISTINCT employee_id) as present FROM attendance WHERE attendance_date = :today");
-    $stmt->bindParam(':today', $today);
-    $stmt->execute();
-    $presentToday = $stmt->fetch(PDO::FETCH_ASSOC)['present'] ?? 0;
-    
-    // On leave today (approved leaves where today is between start and end date)
-    $stmt = $db->prepare("SELECT COUNT(DISTINCT employee_id) as on_leave FROM leave_requests 
-                          WHERE :today BETWEEN start_date AND end_date 
-                          AND status = 'approved'");
-    $stmt->bindParam(':today', $today);
-    $stmt->execute();
-    $onLeave = $stmt->fetch(PDO::FETCH_ASSOC)['on_leave'] ?? 0;
-    
-    // Pending leaves (all pending requests)
-    $stmt = $db->prepare("SELECT COUNT(*) as pending FROM leave_requests WHERE status = 'pending'");
-    $stmt->execute();
-    $pendingLeaves = $stmt->fetch(PDO::FETCH_ASSOC)['pending'] ?? 0;
-    
-    // Unread notifications count
-    $stmt = $db->prepare("SELECT COUNT(*) as unread FROM notifications WHERE user_id = :user_id AND is_read = 0");
-    $stmt->bindParam(':user_id', $_SESSION['user_id']);
-    $stmt->execute();
-    $unreadNotifications = $stmt->fetch(PDO::FETCH_ASSOC)['unread'] ?? 0;
-    
+    $presentToday = $db->query("SELECT COUNT(DISTINCT employee_id) as present FROM attendance WHERE attendance_date = '$today'")->fetch(PDO::FETCH_ASSOC)['present'] ?? 0;
+    $onLeave = $db->query("SELECT COUNT(DISTINCT employee_id) as on_leave FROM leave_requests WHERE '$today' BETWEEN start_date AND end_date AND status = 'approved'")->fetch(PDO::FETCH_ASSOC)['on_leave'] ?? 0;
+    $pendingLeaves = $db->query("SELECT COUNT(*) as pending FROM leave_requests WHERE status = 'pending'")->fetch(PDO::FETCH_ASSOC)['pending'] ?? 0;
+    $unreadNotifications = $db->query("SELECT COUNT(*) as unread FROM notifications WHERE user_id = {$_SESSION['user_id']} AND is_read = 0")->fetch(PDO::FETCH_ASSOC)['unread'] ?? 0;
+
+    // Line Chart Data (Removed strict filter to ensure data shows)
+    $chartLabels = [];
+    $chartValues = [];
+    $chartStmt = $db->query("SELECT DATE_FORMAT(created_at, '%b') as month_name, COUNT(*) as count 
+                             FROM users 
+                             GROUP BY YEAR(created_at), MONTH(created_at), month_name 
+                             ORDER BY YEAR(created_at), MONTH(created_at)");
+    while ($row = $chartStmt->fetch(PDO::FETCH_ASSOC)) {
+        $chartLabels[] = $row['month_name'];
+        $chartValues[] = (int)$row['count'];
+    }
+
+    // Doughnut Chart Data
+    $deptLabels = [];
+    $deptValues = [];
+    $deptStmt = $db->query("SELECT department, COUNT(*) as count FROM users WHERE department IS NOT NULL AND department != '' GROUP BY department");
+    while ($row = $deptStmt->fetch(PDO::FETCH_ASSOC)) {
+        $deptLabels[] = $row['department'];
+        $deptValues[] = (int)$row['count'];
+    }
+
     echo json_encode([
         'success' => true,
         'stats' => [
@@ -53,7 +51,9 @@ try {
             'on_leave' => (int)$onLeave,
             'pending_leaves' => (int)$pendingLeaves,
             'unread_notifications' => (int)$unreadNotifications
-        ]
+        ],
+        'chart_data' => ['labels' => $chartLabels, 'values' => $chartValues],
+        'dept_data' => ['labels' => $deptLabels, 'values' => $deptValues]
     ]);
 } catch(PDOException $e) {
     echo json_encode(['success' => false, 'message' => $e->getMessage()]);

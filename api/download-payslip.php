@@ -2,16 +2,18 @@
 session_start();
 require_once '../config/database.php';
 
-if (!isset($_SESSION['user_id']) || $_SESSION['user_type'] !== 'hr') {
-    http_response_code(403);
-    echo "Unauthorized";
-    exit;
+if (!isset($_SESSION['user_id'])) {
+    http_response_code(403); echo "Unauthorized"; exit;
 }
 
 $id = $_GET['id'] ?? 0;
+$user_id = $_SESSION['user_id'];
+$user_type = $_SESSION['user_type'] ?? '';
+
 $db = (new Database())->getConnection();
 
-$stmt = $db->prepare("SELECT p.*, u.first_name, u.last_name, u.employee_id 
+// 🟢 u.employee_id এর পরিবর্তে as emp_code ব্যবহার করা হয়েছে যাতে p.employee_id ওভাররাইট না হয়
+$stmt = $db->prepare("SELECT p.*, u.first_name, u.last_name, u.employee_id as emp_code 
                        FROM payroll p 
                        JOIN users u ON p.employee_id = u.id 
                        WHERE p.id = ?");
@@ -19,12 +21,15 @@ $stmt->execute([$id]);
 $payroll = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$payroll) {
-    http_response_code(404);
-    echo "Payslip not found";
-    exit;
+    http_response_code(404); echo "Payslip not found"; exit;
 }
 
-$filename = 'payslip_' . $payroll['employee_id'] . '_' . date('Ymd') . '.html';
+// 🟢 সিকিউরিটি চেক (এখন এটি ঠিকমতো কাজ করবে)
+if ($user_type === 'employee' && $payroll['employee_id'] != $user_id) {
+    http_response_code(403); echo "You do not have permission to download this payslip."; exit;
+}
+
+$filename = 'payslip_' . $payroll['emp_code'] . '_' . date('Ymd') . '.html';
 
 $html = '
 <!DOCTYPE html>
@@ -51,7 +56,7 @@ $html = '
         <div style="display:flex;justify-content:space-between;">
             <div>
                 <p><strong>Employee:</strong> ' . $payroll['first_name'] . ' ' . $payroll['last_name'] . '</p>
-                <p><strong>Employee ID:</strong> ' . $payroll['employee_id'] . '</p>
+                <p><strong>Employee ID:</strong> ' . $payroll['emp_code'] . '</p>
             </div>
             <div>
                 <p><strong>Payment Date:</strong> ' . ($payroll['payment_date'] ?? 'N/A') . '</p>
@@ -73,12 +78,10 @@ $html = '
     </div>
     <div class="footer">
         <p class="text-muted">This is a computer-generated payslip.</p>
-        <p class="text-muted">Generated on: ' . date('Y-m-d H:i:s') . '</p>
     </div>
 </body>
 </html>';
 
-// Stream directly to browser as a downloadable file - no disk save needed
 header("Content-Type: text/html; charset=UTF-8");
 header('Content-Disposition: attachment; filename="' . $filename . '"');
 header('Content-Length: ' . strlen($html));
