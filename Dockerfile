@@ -1,14 +1,19 @@
 # PHP 8.2 with Apache
 FROM php:8.2-apache
 
-# Install system dependencies
+# Install system dependencies & PHP extensions (For PDF parsing, zip, and image processing)
 RUN apt-get update && apt-get install -y \
     libpq-dev \
+    libzip-dev \
+    libpng-dev \
+    libjpeg-dev \
+    libfreetype6-dev \
     zip \
     unzip \
     git \
     curl \
-    && docker-php-ext-install pdo pdo_mysql mysqli
+    && docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install pdo pdo_mysql mysqli zip gd mbstring
 
 # Enable Apache mod_rewrite
 RUN a2enmod rewrite
