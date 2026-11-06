@@ -11,6 +11,58 @@ $user_id = $_SESSION['user_id'];
 $user_type = $_SESSION['user_type'];
 $method = $_SERVER['REQUEST_METHOD'];
 
+// 🟢 Cloudinary আপলোড ফাংশন
+function uploadToCloudinary($file_tmp_path, $public_id) {
+    $cloud_url = getenv('CLOUDINARY_URL');
+    if (!$cloud_url) {
+        $env_path = __DIR__ . '/../.env';
+        if (file_exists($env_path)) {
+            $lines = file($env_path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+            foreach ($lines as $line) {
+                if (strpos(trim($line), 'CLOUDINARY_URL=') === 0) {
+                    $cloud_url = trim(explode('=', $line, 2)[1] ?? '', " \"'");
+                    break;
+                }
+            }
+        }
+    }
+    if (!$cloud_url) return ['error' => 'CLOUDINARY_URL not configured'];
+    
+    preg_match('/cloudinary:\/\/(.*):(.*)@(.*)/', $cloud_url, $matches);
+    $api_key = $matches[1] ?? ''; $api_secret = $matches[2] ?? ''; $cloud_name = $matches[3] ?? '';
+    if (!$api_key || !$api_secret || !$cloud_name) return ['error' => 'Invalid CLOUDINARY_URL format'];
+
+    $timestamp = time();
+    $params_to_sign = "public_id=$public_id&timestamp=$timestamp";
+    $signature = sha1($params_to_sign . $api_secret);
+
+    // 🟢 auto/upload ব্যবহার করা হলো যাতে যেকোনো ফাইল (ছবি, PDF) আপলোড হয়
+    $url = "https://api.cloudinary.com/v1_1/$cloud_name/auto/upload";
+    $post_data = [
+        'file' => new CURLFile($file_tmp_path),
+        'api_key' => $api_key,
+        'timestamp' => $timestamp,
+        'public_id' => $public_id,
+        'signature' => $signature
+    ];
+
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $post_data);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    $result = json_decode($response, true);
+    if ($httpCode == 200 && isset($result['secure_url'])) {
+        return ['success' => true, 'url' => $result['secure_url']];
+    } else {
+        return ['error' => $result['error']['message'] ?? 'Upload failed'];
+    }
+}
+
 // ইউজার অনলাইন আপডেট
 try {
     $db->prepare("UPDATE users SET last_active = NOW() WHERE id = ?")->execute([$user_id]);
@@ -39,24 +91,16 @@ if ($method == 'GET') {
         $groups = $stmt->fetchAll(PDO::FETCH_ASSOC);
         foreach ($groups as $g) {
             if ($user_type === 'hr' || $g['name'] === $my_dept) {
-                
-                // গ্রুপের সর্বশেষ মেসেজের সময় বের করা
                 $stmt_last = $db->prepare("SELECT MAX(created_at) FROM messages WHERE conversation_id = ?");
                 $stmt_last->execute([$g['id']]);
                 $last_time = $stmt_last->fetchColumn() ?: '1970-01-01 00:00:00';
 
                 $contacts[] = [
-                    'id' => $g['id'], 
-                    'unique_id' => 'g_' . $g['id'],
-                    'first_name' => $g['name'] . ' Group', 
-                    'last_name' => '',
-                    'user_type' => 'group', 
-                    'initials' => strtoupper(substr($g['name'],0,2)),
-                    'is_online' => true, 
-                    'is_group' => true, 
-                    'last_seen' => 'Group Chat', 
-                    'profile_picture' => null,
-                    'last_message_time' => $last_time // 🟢 নতুন
+                    'id' => $g['id'], 'unique_id' => 'g_' . $g['id'],
+                    'first_name' => $g['name'] . ' Group', 'last_name' => '',
+                    'user_type' => 'group', 'initials' => strtoupper(substr($g['name'],0,2)),
+                    'is_online' => true, 'is_group' => true, 'last_seen' => 'Group Chat', 
+                    'profile_picture' => null, 'last_message_time' => $last_time
                 ];
             }
         }
@@ -72,7 +116,6 @@ if ($method == 'GET') {
         
         $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
         foreach ($users as $u) {
-            // ইউজারের সর্বশেষ মেসেজের সময় বের করা
             $stmt_last = $db->prepare("
                 SELECT MAX(m.created_at) FROM messages m 
                 JOIN conversations c ON m.conversation_id = c.id 
@@ -85,25 +128,15 @@ if ($method == 'GET') {
 
             $is_online = (strtotime($u['last_active']) > strtotime('-2 minutes'));
             $contacts[] = [
-                'id' => $u['id'], 
-                'unique_id' => 'u_' . $u['id'],
-                'first_name' => $u['first_name'], 
-                'last_name' => $u['last_name'],
-                'user_type' => $u['user_type'], 
-                'initials' => strtoupper(substr($u['first_name'],0,1) . substr($u['last_name'],0,1)),
-                'is_online' => $is_online, 
-                'is_group' => false, 
-                'last_seen' => getLastSeen($u['last_active']),
-                'profile_picture' => $u['profile_picture'],
-                'last_message_time' => $last_time // 🟢 নতুন
+                'id' => $u['id'], 'unique_id' => 'u_' . $u['id'],
+                'first_name' => $u['first_name'], 'last_name' => $u['last_name'],
+                'user_type' => $u['user_type'], 'initials' => strtoupper(substr($u['first_name'],0,1) . substr($u['last_name'],0,1)),
+                'is_online' => $is_online, 'is_group' => false, 'last_seen' => getLastSeen($u['last_active']),
+                'profile_picture' => $u['profile_picture'], 'last_message_time' => $last_time
             ];
         }
 
-        // 🟢 সময় অনুযায়ী সাজানো (সর্বশেষ মেসেজ সবার উপরে থাকবে)
-        usort($contacts, function($a, $b) {
-            return strtotime($b['last_message_time']) - strtotime($a['last_message_time']);
-        });
-
+        usort($contacts, function($a, $b) { return strtotime($b['last_message_time']) - strtotime($a['last_message_time']); });
         echo json_encode(['success' => true, 'data' => $contacts]);
         exit;
     }
@@ -146,16 +179,15 @@ if ($method == 'POST') {
         
         $attachment = null; $file_name = null;
 
+        // 🟢 ফাইল Cloudinary-তে আপলোড করা
         if (isset($_FILES['file']) && $_FILES['file']['error'] === UPLOAD_ERR_OK) {
-            $uploadDir = '../uploads/chat/';
-            if (!is_dir($uploadDir)) { mkdir($uploadDir, 0777, true); }
-            
+            $file_tmp_path = $_FILES['file']['tmp_name'];
             $fileName = $_FILES['file']['name'];
-            $fileExt = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
-            $newFileName = uniqid() . '.' . $fileExt;
+            $public_id = 'kormoshathi/chat/' . uniqid() . '_' . time();
             
-            if (move_uploaded_file($_FILES['file']['tmp_name'], $uploadDir . $newFileName)) {
-                $attachment = 'uploads/chat/' . $newFileName;
+            $upload_result = uploadToCloudinary($file_tmp_path, $public_id);
+            if (isset($upload_result['success'])) {
+                $attachment = $upload_result['url']; // Cloudinary URL
                 $file_name = $fileName;
             }
         }
@@ -176,7 +208,6 @@ if ($method == 'POST') {
         if ($conv_id && ($message !== '' || $attachment)) {
             $stmt = $db->prepare("INSERT INTO messages (conversation_id, sender_id, message, attachment, file_name) VALUES (?, ?, ?, ?, ?)");
             if ($stmt->execute([$conv_id, $user_id, $message, $attachment, $file_name])) {
-                
                 $sender_name = $_SESSION['first_name'] ?? 'Someone';
                 if ($is_group == 1) {
                     $g_stmt = $db->prepare("SELECT name FROM conversations WHERE id = ?");
@@ -192,7 +223,6 @@ if ($method == 'POST') {
                 } else {
                     $db->prepare("INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, 'info')")->execute([$receiver_id, "New Message", "$sender_name sent you a message."]);
                 }
-
                 echo json_encode(['success' => true, 'conversation_id' => $conv_id]);
             } else {
                 echo json_encode(['success' => false, 'error' => 'Database error: ' . implode(" ", $stmt->errorInfo())]);

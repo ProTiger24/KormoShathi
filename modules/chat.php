@@ -13,11 +13,7 @@ $pic = $user['profile_picture'] ?? '';
 $userType = $_SESSION['user_type'];
 $dashboardUrl = ($userType === 'hr') ? '../hr-dashboard.php' : '../employee-dashboard.php';
 
-$isUrl = !empty($pic) && (strpos($pic, 'http://') === 0 || strpos($pic, 'https://') === 0);
-$isLocal = !empty($pic) && !$isUrl && file_exists(__DIR__ . '/../' . $pic);
-$profileImage = '';
-if ($isUrl) { $profileImage = $pic; } 
-elseif ($isLocal) { $profileImage = '/../' . trim($pic, '/'); }
+$profileImage = img_url($pic);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -393,8 +389,9 @@ elseif ($isLocal) { $profileImage = '/../' . trim($pic, '/'); }
                 let dotHtml = '';
                 let avatarHtml = '';
                 
+                // 🟢 Cloudinary বা লোকাল পাথ হ্যান্ডেল করা
                 if (c.profile_picture && !c.is_group) {
-                    const isUrl = c.profile_picture.startsWith('http');
+                    const isUrl = c.profile_picture.startsWith('http://') || c.profile_picture.startsWith('https://');
                     const imgSrc = isUrl ? c.profile_picture : '../' + c.profile_picture;
                     avatarHtml = `<img src="${imgSrc}" style="width:40px;height:40px;border-radius:50%;object-fit:cover;">`;
                 } else {
@@ -444,8 +441,9 @@ elseif ($isLocal) { $profileImage = '/../' . trim($pic, '/'); }
             const contact = allContacts.find(c => c.unique_id === uniqueId);
             
             let avatarHtml = '';
+            // 🟢 হেডারের ছবির জন্য ক্লাউডিনারি চেক
             if (contact.profile_picture && !isGroup) {
-                const isUrl = contact.profile_picture.startsWith('http');
+                const isUrl = contact.profile_picture.startsWith('http://') || contact.profile_picture.startsWith('https://');
                 const imgSrc = isUrl ? contact.profile_picture : '../' + contact.profile_picture;
                 avatarHtml = `<img src="${imgSrc}" style="width:35px;height:35px;border-radius:50%;object-fit:cover;">`;
             } else {
@@ -502,13 +500,22 @@ elseif ($isLocal) { $profileImage = '/../' . trim($pic, '/'); }
                         
                         let fileHtml = '';
                         if (m.attachment) {
-                            const ext = m.attachment.split('.').pop().toLowerCase();
-                            if(['jpg','png','jpeg','gif'].includes(ext)) {
-                                fileHtml = `<a href="../${m.attachment}" target="_blank"><img src="../${m.attachment}" class="attachment-img"></a>`;
+                            // 🟢 Cloudinary লিংক এবং লোকাল ফাইল হ্যান্ডেল করার লজিক
+                            let finalUrl = m.attachment;
+                            if (!finalUrl.startsWith('http://') && !finalUrl.startsWith('https://')) {
+                                finalUrl = '../' + finalUrl;
+                            }
+                            
+                            // URL থেকে এক্সটেনশন বের করা
+                            const cleanUrl = m.attachment.split('?')[0]; 
+                            const ext = cleanUrl.split('.').pop().toLowerCase();
+
+                            if(['jpg','png','jpeg','gif','webp'].includes(ext)) {
+                                fileHtml = `<a href="${finalUrl}" target="_blank"><img src="${finalUrl}" class="attachment-img"></a>`;
                             } else {
                                 fileHtml = `<div class="attachment-box">
                                     <i class="fa-solid fa-file fs-5"></i>
-                                    <a href="../${m.attachment}" download="${m.file_name}">${m.file_name || 'Download File'}</a>
+                                    <a href="${finalUrl}" download="${m.file_name || 'Download File'}">${m.file_name || 'Download File'}</a>
                                 </div>`;
                             }
                         }
