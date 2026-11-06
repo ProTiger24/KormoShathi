@@ -31,3 +31,6 @@ vendor/
 .vscode/
 .env.backup
 database.sql
+kormoshathi_backup.sql
+*.sql
+.env
