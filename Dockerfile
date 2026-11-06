@@ -48,7 +48,7 @@ RUN echo "post_max_size=20M" >> /usr/local/etc/php/conf.d/custom.ini
 RUN echo "max_execution_time=300" >> /usr/local/etc/php/conf.d/custom.ini
 RUN echo "error_log = /var/log/php_errors.log" >> /usr/local/etc/php/conf.d/custom.ini
 RUN echo "log_errors = On" >> /usr/local/etc/php/conf.d/custom.ini
-RUN echo "display_errors = On" >> /usr/local/etc/php/conf.d/custom.ini
+RUN echo "display_errors = Off" >> /usr/local/etc/php/conf.d/custom.ini
 
 EXPOSE 80
 CMD ["apache2-foreground"]
