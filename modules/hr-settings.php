@@ -649,7 +649,7 @@ $profileImage = $isUrl ? $pic : ($isLocal ? '../' . trim($pic, '/') : '');
             document.getElementById(tabId).classList.add('active');
         }
 
-        // 1. ছবি আপলোড
+        // 1. ছবি আপলোড (🟢 এখানে Cloudinary API লিংকটি সেট করা হয়েছে)
         document.getElementById('profile_pic_input')?.addEventListener('change', async function(e) {
             if (e.target.files.length > 0) {
                 const file = e.target.files[0];
@@ -664,7 +664,8 @@ $profileImage = $isUrl ? $pic : ($isLocal ? '../' . trim($pic, '/') : '');
                 formData.append('profile_pic', file);
 
                 try {
-                    const res = await fetch('../api/upload-profile-pic.php', { method: 'POST', body: formData });
+                    // 🟢 upload-profile-pic.php এর বদলে upload-profile.php ব্যবহার করা হলো
+                    const res = await fetch('../api/upload-profile.php', { method: 'POST', body: formData });
                     const result = await res.json();
                     if (!result.success) alert('Error: ' + result.message);
                 } catch (err) { alert('Server error while uploading picture.'); }
