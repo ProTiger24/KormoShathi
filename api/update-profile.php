@@ -1,59 +1,87 @@
 <?php
-header("Content-Type: application/json; charset=UTF-8");
+// এরর ডিসপ্লে বন্ধ করা হলো যাতে JSON ফরম্যাট নষ্ট না হয়
+ini_set('display_errors', 0);
+error_reporting(E_ALL);
+
 session_start();
+header("Content-Type: application/json");
 require_once '../config/database.php';
 
-if (!isset($_SESSION['user_id'])) { echo json_encode(['success' => false, 'message' => 'Unauthorized']); exit; }
+// Authorization Check
+if (!isset($_SESSION['user_id'])) {
+    echo json_encode(['success' => false, 'message' => 'Unauthorized']);
+    exit;
+}
 
 $db = (new Database())->getConnection();
+$input = json_decode(file_get_contents('php://input'), true);
+
+if (!$input || !isset($input['action'])) {
+    echo json_encode(['success' => false, 'message' => 'Invalid request']);
+    exit;
+}
+
 $user_id = $_SESSION['user_id'];
-$method = $_SERVER['REQUEST_METHOD'];
+$action = $input['action'];
 
-if ($method == 'POST') {
-    $input = json_decode(file_get_contents("php://input"), true);
-    
-    // 🟢 Profile Update
-    if (isset($input['action']) && $input['action'] === 'update_profile') {
-        try {
-            $stmt = $db->prepare("UPDATE users SET first_name=?, last_name=?, phone=?, email=?, address=?, emergency_contact=?, blood_group=?, date_of_birth=? WHERE id=?");
-            $stmt->execute([
-                $input['first_name'], $input['last_name'], $input['phone'], 
-                $input['email'], $input['address'], $input['emergency_contact'],
-                $input['blood_group'], $input['date_of_birth'], $user_id
-            ]);
-            
-            // সেশন আপডেট
-            $_SESSION['first_name'] = $input['first_name'];
-            $_SESSION['last_name'] = $input['last_name'];
-            
-            echo json_encode(['success' => true, 'message' => 'Profile updated successfully!']);
-        } catch (Exception $e) {
-            echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
-        }
-        exit;
-    }
-
-    // 🟢 Password Update
-    if (isset($input['action']) && $input['action'] === 'update_password') {
-        $current_pass = $input['current_password'];
-        $new_pass = $input['new_password'];
+try {
+    if ($action === 'update_profile') {
+        // ?? '' ব্যবহার করা হলো যাতে ফিল্ড না থাকলেও এরর না আসে
+        $first_name = trim($input['first_name'] ?? '');
+        $last_name  = trim($input['last_name'] ?? '');
+        $email      = trim($input['email'] ?? '');
+        $phone      = trim($input['phone'] ?? '');
         
-        $stmt = $db->prepare("SELECT password_hash FROM users WHERE id = ?");
+        $address = trim($input['address'] ?? '');
+        $emergency_contact = trim($input['emergency_contact'] ?? '');
+        $blood_group = trim($input['blood_group'] ?? '');
+        $date_of_birth = trim($input['date_of_birth'] ?? '');
+
+        if (empty($first_name) || empty($email)) {
+            echo json_encode(['success' => false, 'message' => 'First Name and Email are required']);
+            exit;
+        }
+
+        // ডাটাবেসে আপডেট (আপনার ডাটাবেসে এই কলামগুলো থাকলে কাজ করবে)
+        $stmt = $db->prepare("UPDATE users SET first_name=?, last_name=?, email=?, phone=?, address=?, emergency_contact=?, blood_group=?, date_of_birth=? WHERE id=?");
+        $stmt->execute([$first_name, $last_name, $email, $phone, $address, $emergency_contact, $blood_group, $date_of_birth, $user_id]);
+
+        // সেশন আপডেট
+        $_SESSION['first_name'] = $first_name;
+        $_SESSION['last_name'] = $last_name;
+
+        echo json_encode(['success' => true, 'message' => 'Profile updated successfully!']);
+    } 
+    elseif ($action === 'update_password') {
+        $current_password = $input['current_password'] ?? '';
+        $new_password     = $input['new_password'] ?? '';
+
+        if (empty($current_password) || empty($new_password)) {
+            echo json_encode(['success' => false, 'message' => 'Both current and new passwords are required']);
+            exit;
+        }
+
+        // বর্তমান পাসওয়ার্ড চেক
+        $stmt = $db->prepare("SELECT password FROM users WHERE id = ?");
         $stmt->execute([$user_id]);
-        $hash = $stmt->fetchColumn();
-        
-        if (password_verify($current_pass, $hash)) {
-            $new_hash = password_hash($new_pass, PASSWORD_DEFAULT);
-            $stmt = $db->prepare("UPDATE users SET password_hash = ? WHERE id = ?");
-            if ($stmt->execute([$new_hash, $user_id])) {
-                echo json_encode(['success' => true, 'message' => 'Password changed successfully!']);
-            } else {
-                echo json_encode(['success' => false, 'message' => 'Failed to update password.']);
-            }
-        } else {
-            echo json_encode(['success' => false, 'message' => 'Current password is incorrect!']);
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$user || !password_verify($current_password, $user['password'])) {
+            echo json_encode(['success' => false, 'message' => 'Current password is incorrect']);
+            exit;
         }
-        exit;
+
+        // নতুন পাসওয়ার্ড আপডেট
+        $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
+        $stmt = $db->prepare("UPDATE users SET password = ? WHERE id = ?");
+        $stmt->execute([$hashed_password, $user_id]);
+
+        echo json_encode(['success' => true, 'message' => 'Password updated successfully!']);
+    } 
+    else {
+        echo json_encode(['success' => false, 'message' => 'Unknown action']);
     }
+} catch (PDOException $e) {
+    echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
 }
 ?>
