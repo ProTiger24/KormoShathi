@@ -531,7 +531,7 @@ $profileImage = $isUrl ? $pic : ($isLocal ? '../' . trim($pic, '/') : '');
                 formData.append('profile_pic', file);
 
                 try {
-                    const res = await fetch('../api/upload-profile-pic.php', { method: 'POST', body: formData });
+                    const res = await fetch('../api/upload-profile.php', { method: 'POST', body: formData });
                     const result = await res.json();
                     if (!result.success) alert('Error: ' + result.message);
                 } catch (err) { alert('Server error while uploading picture.'); }
