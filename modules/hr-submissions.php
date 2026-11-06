@@ -228,7 +228,7 @@ $submissions = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 
                 <button class="profile-button" type="button" aria-label="HR profile">
                     <?php if (!empty($pic)): ?>
-                        <img src="../<?php echo htmlspecialchars($pic, ENT_QUOTES, 'UTF-8'); ?>" class="avatar" alt="Profile">
+                        <img src="<?php echo htmlspecialchars(img_url($pic), ENT_QUOTES, 'UTF-8'); ?>" class="avatar" alt="Profile">
                     <?php else: ?>
                         <span class="avatar"><?php echo htmlspecialchars($initials, ENT_QUOTES, 'UTF-8'); ?></span>
                     <?php endif; ?>
@@ -259,8 +259,8 @@ $submissions = $stmt->fetchAll(PDO::FETCH_ASSOC);
                             <!-- Left Side: Submission Details -->
                             <div class="col-lg-7">
                                 <div class="d-flex gap-3 mb-3">
-                                    <?php if(!empty($sub['profile_picture']) && file_exists('../' . $sub['profile_picture'])): ?>
-                                        <img src="../<?php echo htmlspecialchars($sub['profile_picture']); ?>" class="emp-avatar">
+                                    <?php if(!empty($sub['profile_picture']) && img_ok($sub['profile_picture'])): ?>
+                                        <img src="<?php echo htmlspecialchars(img_url($sub['profile_picture'])); ?>" class="emp-avatar">
                                     <?php else: ?>
                                         <div class="emp-avatar"><?php echo strtoupper(substr($sub['first_name'] ?? 'E', 0, 1)); ?></div>
                                     <?php endif; ?>

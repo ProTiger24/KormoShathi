@@ -257,7 +257,7 @@ $position = $_SESSION['position'] ?? ($user['position'] ?? 'Employee');
                     <span class="top-divider"></span>
                     <button class="profile-button" type="button" aria-label="HR profile">
                         <?php if (!empty($pic)): ?>
-                            <img src="../<?php echo htmlspecialchars($pic, ENT_QUOTES, 'UTF-8'); ?>" class="avatar" alt="Profile">
+                            <img src="<?php echo htmlspecialchars(img_url($pic), ENT_QUOTES, 'UTF-8'); ?>" class="avatar" alt="Profile">
                         <?php else: ?>
                             <span class="avatar"><?php echo htmlspecialchars($initials, ENT_QUOTES, 'UTF-8'); ?></span>
                         <?php endif; ?>
@@ -284,7 +284,7 @@ $position = $_SESSION['position'] ?? ($user['position'] ?? 'Employee');
                     
                     <div class="d-flex align-items-center gap-2 ps-2">
                         <?php if (!empty($pic)): ?>
-                            <img src="../<?php echo htmlspecialchars($pic, ENT_QUOTES, 'UTF-8'); ?>" class="avatar" alt="Profile">
+                            <img src="<?php echo htmlspecialchars(img_url($pic), ENT_QUOTES, 'UTF-8'); ?>" class="avatar" alt="Profile">
                         <?php else: ?>
                             <div class="avatar"><?php echo htmlspecialchars($initials, ENT_QUOTES, 'UTF-8'); ?></div>
                         <?php endif; ?>

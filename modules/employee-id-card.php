@@ -275,7 +275,7 @@ function e($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
                 
                 <button class="profile-button" type="button" aria-label="HR profile">
                     <?php if (!empty($hrPic)): ?>
-                        <img src="../<?php echo e($hrPic); ?>" class="avatar" alt="Profile">
+                        <img src="<?php echo e(img_url($hrPic)); ?>" class="avatar" alt="Profile">
                     <?php else: ?>
                         <span class="avatar"><?php echo e($hrInitials); ?></span>
                     <?php endif; ?>
@@ -309,8 +309,8 @@ function e($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
                 
                 <div class="id-body">
                     <div class="profile-wrap">
-                        <?php if(!empty($employee['profile_picture']) && file_exists('../' . $employee['profile_picture'])): ?>
-                            <img src="../<?php echo e($employee['profile_picture']); ?>" class="profile-img" alt="Profile">
+                        <?php if(!empty($employee['profile_picture']) && img_ok($employee['profile_picture'])): ?>
+                            <img src="<?php echo e(img_url($employee['profile_picture'])); ?>" class="profile-img" alt="Profile">
                         <?php else: ?>
                             <div class="profile-initials">
                                 <?php echo strtoupper(substr($employee['first_name'], 0, 1) . substr($employee['last_name'], 0, 1)); ?>

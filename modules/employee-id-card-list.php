@@ -203,7 +203,7 @@ $employees = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 
                 <button class="profile-button" type="button" aria-label="HR profile">
                     <?php if (!empty($pic)): ?>
-                        <img src="../<?php echo htmlspecialchars($pic, ENT_QUOTES, 'UTF-8'); ?>" class="avatar" alt="Profile">
+                        <img src="<?php echo htmlspecialchars(img_url($pic), ENT_QUOTES, 'UTF-8'); ?>" class="avatar" alt="Profile">
                     <?php else: ?>
                         <span class="avatar"><?php echo htmlspecialchars($initials, ENT_QUOTES, 'UTF-8'); ?></span>
                     <?php endif; ?>
@@ -234,11 +234,11 @@ $employees = $stmt->fetchAll(PDO::FETCH_ASSOC);
             <div class="id-grid" id="idCardGrid">
                 <?php foreach($employees as $emp): 
                     $initials = strtoupper(substr($emp['first_name'], 0, 1) . substr($emp['last_name'], 0, 1));
-                    $hasPic = !empty($emp['profile_picture']) && file_exists('../' . $emp['profile_picture']);
+                    $hasPic = !empty($emp['profile_picture']) && img_ok($emp['profile_picture']);
                 ?>
                     <div class="id-card-item candidate-item">
                         <?php if($hasPic): ?>
-                            <img src="../<?php echo htmlspecialchars($emp['profile_picture']); ?>" class="id-avatar" alt="Profile">
+                            <img src="<?php echo htmlspecialchars(img_url($emp['profile_picture'])); ?>" class="id-avatar" alt="Profile">
                         <?php else: ?>
                             <div class="id-avatar"><?php echo $initials; ?></div>
                         <?php endif; ?>

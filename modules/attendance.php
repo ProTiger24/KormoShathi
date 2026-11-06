@@ -171,7 +171,7 @@ $pic = $user['profile_picture'] ?? '';
                 <span class="top-divider"></span>
                 <button class="profile-button" type="button" aria-label="HR profile">
                     <?php if (!empty($pic)): ?>
-                        <img src="../<?php echo htmlspecialchars($pic, ENT_QUOTES, 'UTF-8'); ?>" class="avatar" alt="Profile">
+                        <img src="<?php echo htmlspecialchars(img_url($pic), ENT_QUOTES, 'UTF-8'); ?>" class="avatar" alt="Profile">
                     <?php else: ?>
                         <span class="avatar"><?php echo htmlspecialchars($initials, ENT_QUOTES, 'UTF-8'); ?></span>
                     <?php endif; ?>

@@ -65,7 +65,7 @@ function e($value) { return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8'
         <header class="topbar">
             <div class="d-flex align-items-center"><h4 class="fw-bold m-0" style="font-family: 'Plus Jakarta Sans', sans-serif;">Monthly Attendance Overview</h4></div>
             <div class="d-flex align-items-center gap-2">
-                <?php if (!empty($pic)): ?><img src="../<?php echo htmlspecialchars($pic, ENT_QUOTES, 'UTF-8'); ?>" class="avatar" alt="Profile"><?php else: ?><div class="avatar"><?php echo $initials; ?></div><?php endif; ?>
+                <?php if (!empty($pic)): ?><img src="<?php echo htmlspecialchars(img_url($pic), ENT_QUOTES, 'UTF-8'); ?>" class="avatar" alt="Profile"><?php else: ?><div class="avatar"><?php echo $initials; ?></div><?php endif; ?>
                 <span class="fw-bold ms-2" style="font-size: 14px;"><?php echo htmlspecialchars($firstName . ' ' . $lastName); ?></span>
             </div>
         </header>

@@ -110,7 +110,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $initials = strtoupper(substr($emp['first_name'], 0, 1) . substr($emp['last_name'], 0, 1));
-$profilePicUrl = !empty($emp['profile_picture']) ? '../' . $emp['profile_picture'] : '';
+$profilePicUrl = img_url($emp['profile_picture'] ?? '');
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -271,7 +271,7 @@ $profilePicUrl = !empty($emp['profile_picture']) ? '../' . $emp['profile_picture
             <div class="d-flex align-items-center gap-3">
                 <div class="profile-button">
                     <?php if (!empty($hrPic)): ?>
-                        <img src="../<?php echo htmlspecialchars($hrPic, ENT_QUOTES, 'UTF-8'); ?>" class="avatar" alt="Profile">
+                        <img src="<?php echo htmlspecialchars(img_url($hrPic), ENT_QUOTES, 'UTF-8'); ?>" class="avatar" alt="Profile">
                     <?php else: ?>
                         <span class="avatar"><?php echo $hrInitials; ?></span>
                     <?php endif; ?>

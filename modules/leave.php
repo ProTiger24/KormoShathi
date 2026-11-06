@@ -286,7 +286,7 @@ $dashboardUrl = ($user_type === 'hr') ? '../hr-dashboard.php' : '../employee-das
                     <span class="top-divider"></span>
                     <button class="profile-button" type="button" aria-label="Profile">
                         <?php if (!empty($pic)): ?>
-                            <img src="../<?php echo htmlspecialchars($pic, ENT_QUOTES, 'UTF-8'); ?>" class="avatar" alt="Profile">
+                            <img src="<?php echo htmlspecialchars(img_url($pic), ENT_QUOTES, 'UTF-8'); ?>" class="avatar" alt="Profile">
                         <?php else: ?>
                             <span class="avatar"><?php echo htmlspecialchars($initials, ENT_QUOTES, 'UTF-8'); ?></span>
                         <?php endif; ?>
@@ -313,7 +313,7 @@ $dashboardUrl = ($user_type === 'hr') ? '../hr-dashboard.php' : '../employee-das
                     
                     <div class="d-flex align-items-center gap-2 ps-2">
                         <?php if ($pic): ?>
-                            <img src="../<?php echo htmlspecialchars($pic, ENT_QUOTES, 'UTF-8'); ?>" class="avatar" alt="Profile">
+                            <img src="<?php echo htmlspecialchars(img_url($pic), ENT_QUOTES, 'UTF-8'); ?>" class="avatar" alt="Profile">
                         <?php else: ?>
                             <div class="avatar"><?php echo htmlspecialchars($initials, ENT_QUOTES, 'UTF-8'); ?></div>
                         <?php endif; ?>
