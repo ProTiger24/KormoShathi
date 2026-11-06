@@ -11,6 +11,57 @@ use Smalot\PdfParser\Parser;
 error_reporting(E_ALL);
 ini_set('display_errors', 0);
 
+// ==========================================
+// CLOUDINARY UPLOAD HELPER FUNCTION
+// ==========================================
+function uploadToCloudinary($file_tmp_path, $public_id) {
+    $cloud_url = getenv('CLOUDINARY_URL');
+    if (!$cloud_url) {
+        return ['error' => 'CLOUDINARY_URL not configured in Render Environment Variables'];
+    }
+    
+    preg_match('/cloudinary:\/\/(.*):(.*)@(.*)/', $cloud_url, $matches);
+    $api_key = $matches[1] ?? '';
+    $api_secret = $matches[2] ?? '';
+    $cloud_name = $matches[3] ?? '';
+
+    if (!$api_key || !$api_secret || !$cloud_name) {
+        return ['error' => 'Invalid CLOUDINARY_URL format'];
+    }
+
+    $timestamp = time();
+    $params_to_sign = "public_id=$public_id&timestamp=$timestamp";
+    $signature = sha1($params_to_sign . $api_secret);
+
+    // PDF বা ডকুমেন্টের জন্য auto/upload
+    $url = "https://api.cloudinary.com/v1_1/$cloud_name/auto/upload";
+
+    $post_data = [
+        'file' => new CURLFile($file_tmp_path),
+        'api_key' => $api_key,
+        'timestamp' => $timestamp,
+        'public_id' => $public_id,
+        'signature' => $signature
+    ];
+
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $post_data);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    $result = json_decode($response, true);
+
+    if ($httpCode == 200 && isset($result['secure_url'])) {
+        return ['success' => true, 'url' => $result['secure_url']];
+    } else {
+        return ['error' => $result['error']['message'] ?? 'Upload failed', 'raw' => $response];
+    }
+}
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
     echo json_encode(['success' => false, 'message' => 'Invalid request method.']);
@@ -34,51 +85,29 @@ try {
     }
 
     // ==========================================
-    // RESUME FILE UPLOAD
+    // RESUME FILE VALIDATION
     // ==========================================
     if (!isset($_FILES['resume']) || $_FILES['resume']['error'] !== UPLOAD_ERR_OK) {
         echo json_encode(['success' => false, 'message' => 'Resume file is required.']);
         exit;
     }
 
-    $upload_dir = __DIR__ . '/../uploads/resumes/';
-    if (!is_dir($upload_dir)) { mkdir($upload_dir, 0755, true); }
-
+    $file_tmp_path = $_FILES['resume']['tmp_name'];
     $original_name = basename($_FILES['resume']['name']);
     $extension = strtolower(pathinfo($original_name, PATHINFO_EXTENSION));
 
     if ($extension !== 'pdf') {
-        echo json_encode(['success' => false, 'message' => 'Only PDF resumes are allowed.']);
+        echo json_encode(['success' => false, 'message' => 'Only PDF resumes are allowed for AI parsing.']);
         exit;
     }
 
-    $file_name = uniqid('resume_', true) . '.pdf';
-    $target_file = $upload_dir . $file_name;
-
-    if (!move_uploaded_file($_FILES['resume']['tmp_name'], $target_file)) {
-        echo json_encode(['success' => false, 'message' => 'Failed to upload resume.']);
-        exit;
-    }
-
-    $resume_path = 'uploads/resumes/' . $file_name;
-
     // ==========================================
-    // AI SCREENING CONFIGURATION
-    // ==========================================
-    $stmt = $db->prepare("SELECT required_skills, job_title FROM ai_screening_config WHERE id = ?");
-    $stmt->execute([$config_id]);
-    $job = $stmt->fetch(PDO::FETCH_ASSOC);
-
-    $required_skills = $job ? $job['required_skills'] : 'PHP, MySQL, JavaScript';
-    $job_title = $job ? $job['job_title'] : 'Software Engineer';
-
-    // ==========================================
-    // PDF TEXT EXTRACTION
+    // PDF TEXT EXTRACTION (লোকাল টেম্পোরারি ফাইল থেকে)
     // ==========================================
     $resume_text = '';
     try {
         $parser = new Parser();
-        $pdf = $parser->parseFile($target_file);
+        $pdf = $parser->parseFile($file_tmp_path); // লোকাল টেম্পোরারি পাথ ব্যবহার করা হলো
         $resume_text = $pdf->getText();
         
         // টেক্সট পরিষ্কার (শুধু কন্ট্রোল ক্যারেক্টার রিমুভ, ইউনিকোড রাখা হলো)
@@ -90,6 +119,30 @@ try {
     } catch (Throwable $e) {
         error_log("PDF Parsing Error: " . $e->getMessage());
     }
+
+    // ==========================================
+    // CLOUDINARY-তে ফাইল আপলোড
+    // ==========================================
+    $public_id = 'kormoshathi/resumes/resume_' . time() . '_' . uniqid();
+    $upload_result = uploadToCloudinary($file_tmp_path, $public_id);
+
+    if (!isset($upload_result['success'])) {
+        error_log("Cloudinary Resume Upload Error: " . json_encode($upload_result));
+        echo json_encode(['success' => false, 'message' => 'Failed to upload resume to cloud storage.']);
+        exit;
+    }
+    
+    $resume_path = $upload_result['url']; // ডাটাবেসে সেভ হবে Cloudinary URL
+
+    // ==========================================
+    // AI SCREENING CONFIGURATION
+    // ==========================================
+    $stmt = $db->prepare("SELECT required_skills, job_title FROM ai_screening_config WHERE id = ?");
+    $stmt->execute([$config_id]);
+    $job = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    $required_skills = $job ? $job['required_skills'] : 'PHP, MySQL, JavaScript';
+    $job_title = $job ? $job['job_title'] : 'Software Engineer';
 
     // ==========================================
     // GROQ AI RESUME ANALYSIS
@@ -143,7 +196,6 @@ try {
             $curl_error = curl_error($ch);
             
             error_log("Groq API HTTP Code: " . $http_code);
-            error_log("Groq API Raw Response: " . $response);
 
             if ($response !== false && $http_code >= 200 && $http_code < 300) {
                 $ai_result = json_decode($response, true);
@@ -213,3 +265,4 @@ try {
     http_response_code(500);
     echo json_encode(['success' => false, 'message' => 'Something went wrong while processing your resume.']);
 }
+?>
