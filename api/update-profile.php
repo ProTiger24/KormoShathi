@@ -1,5 +1,4 @@
 <?php
-// এরর ডিসপ্লে বন্ধ করা হলো যাতে JSON ফরম্যাট নষ্ট না হয়
 ini_set('display_errors', 0);
 error_reporting(E_ALL);
 
@@ -7,7 +6,6 @@ session_start();
 header("Content-Type: application/json");
 require_once '../config/database.php';
 
-// Authorization Check
 if (!isset($_SESSION['user_id'])) {
     echo json_encode(['success' => false, 'message' => 'Unauthorized']);
     exit;
@@ -26,18 +24,27 @@ $action = $input['action'];
 
 try {
     if ($action === 'update_profile') {
-        // টেক্সট ফিল্ডগুলো নেওয়া
-        $first_name = trim($input['first_name'] ?? '');
-        $last_name  = trim($input['last_name'] ?? '');
-        $email      = trim($input['email'] ?? '');
-        $phone      = trim($input['phone'] ?? '');
+        // বর্তমান ডেটা বের করা (যাতে যেগুলো ফর্মে নেই, সেগুলো ডিলিট না হয়ে আগেরটাই থাকে)
+        $stmt = $db->prepare("SELECT * FROM users WHERE id = ?");
+        $stmt->execute([$user_id]);
+        $current_user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$current_user) {
+            echo json_encode(['success' => false, 'message' => 'User not found']);
+            exit;
+        }
+
+        // 🟢 যদি ইনপুটে ফিল্ড থাকে, তবেই আপডেট হবে। না থাকলে আগের ডেটাই থাকবে।
+        $first_name = isset($input['first_name']) ? trim($input['first_name']) : ($current_user['first_name'] ?? '');
+        $last_name  = isset($input['last_name']) ? trim($input['last_name']) : ($current_user['last_name'] ?? '');
+        $email      = isset($input['email']) ? trim($input['email']) : ($current_user['email'] ?? '');
+        $phone      = isset($input['phone']) ? trim($input['phone']) : ($current_user['phone'] ?? '');
         
-        $address = trim($input['address'] ?? '');
-        $emergency_contact = trim($input['emergency_contact'] ?? '');
-        $blood_group = trim($input['blood_group'] ?? '');
+        $address = isset($input['address']) ? trim($input['address']) : ($current_user['address'] ?? '');
+        $emergency_contact = isset($input['emergency_contact']) ? trim($input['emergency_contact']) : ($current_user['emergency_contact'] ?? '');
+        $blood_group = isset($input['blood_group']) ? trim($input['blood_group']) : ($current_user['blood_group'] ?? '');
         
-        // 🟢 ডেট অফ বার্থ হ্যান্ডেল করা (খালি থাকলে NULL হবে, নাহলে সঠিক ডেট)
-        $dob_input = trim($input['date_of_birth'] ?? '');
+        $dob_input = isset($input['date_of_birth']) ? trim($input['date_of_birth']) : ($current_user['date_of_birth'] ?? '');
         $date_of_birth = !empty($dob_input) ? $dob_input : null;
 
         if (empty($first_name) || empty($email)) {
@@ -45,11 +52,9 @@ try {
             exit;
         }
 
-        // ডাটাবেসে আপডেট
-        $stmt = $db->prepare("UPDATE users SET first_name=?, last_name=?, email=?, phone=?, address=?, emergency_contact=?, blood_group=?, date_of_birth=? WHERE id=?");
-        $stmt->execute([$first_name, $last_name, $email, $phone, $address, $emergency_contact, $blood_group, $date_of_birth, $user_id]);
+        $updateStmt = $db->prepare("UPDATE users SET first_name=?, last_name=?, email=?, phone=?, address=?, emergency_contact=?, blood_group=?, date_of_birth=? WHERE id=?");
+        $updateStmt->execute([$first_name, $last_name, $email, $phone, $address, $emergency_contact, $blood_group, $date_of_birth, $user_id]);
 
-        // সেশন আপডেট
         $_SESSION['first_name'] = $first_name;
         $_SESSION['last_name'] = $last_name;
 
@@ -64,7 +69,6 @@ try {
             exit;
         }
 
-        // বর্তমান পাসওয়ার্ড চেক
         $stmt = $db->prepare("SELECT password FROM users WHERE id = ?");
         $stmt->execute([$user_id]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -74,7 +78,6 @@ try {
             exit;
         }
 
-        // নতুন পাসওয়ার্ড আপডেট
         $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
         $stmt = $db->prepare("UPDATE users SET password = ? WHERE id = ?");
         $stmt->execute([$hashed_password, $user_id]);
