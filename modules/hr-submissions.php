@@ -253,44 +253,44 @@ $submissions = $stmt->fetchAll(PDO::FETCH_ASSOC);
         <div id="submissionsContainer">
             <?php if (count($submissions) > 0): ?>
                 <?php foreach ($submissions as $sub): ?>
-                    <div class="submission-card <?php echo $sub['status']; ?>" id="submission-<?php echo $sub['id']; ?>">
+                    <div class="submission-card <?php echo $sub['status'] ?? 'pending'; ?>" id="submission-<?php echo $sub['id']; ?>">
                         <div class="row g-4">
                             
                             <!-- Left Side: Submission Details -->
                             <div class="col-lg-7">
                                 <div class="d-flex gap-3 mb-3">
-                                    <?php if($sub['profile_picture'] && file_exists('../' . $sub['profile_picture'])): ?>
-                                        <img src="../<?php echo $sub['profile_picture']; ?>" class="emp-avatar">
+                                    <?php if(!empty($sub['profile_picture']) && file_exists('../' . $sub['profile_picture'])): ?>
+                                        <img src="../<?php echo htmlspecialchars($sub['profile_picture']); ?>" class="emp-avatar">
                                     <?php else: ?>
-                                        <div class="emp-avatar"><?php echo strtoupper(substr($sub['first_name'], 0, 1)); ?></div>
+                                        <div class="emp-avatar"><?php echo strtoupper(substr($sub['first_name'] ?? 'E', 0, 1)); ?></div>
                                     <?php endif; ?>
                                     <div>
-                                        <div class="sub-title"><?php echo htmlspecialchars($sub['title']); ?></div>
+                                        <div class="sub-title"><?php echo htmlspecialchars($sub['title'] ?? ''); ?></div>
                                         <div class="text-muted" style="font-size: 13px;">
-                                            <i class="fa-regular fa-user me-1"></i> <?php echo htmlspecialchars($sub['first_name'] . ' ' . $sub['last_name']); ?>
+                                            <i class="fa-regular fa-user me-1"></i> <?php echo htmlspecialchars(($sub['first_name'] ?? '') . ' ' . ($sub['last_name'] ?? '')); ?>
                                             <span class="mx-1">•</span>
-                                            <span class="badge bg-light text-dark border"><?php echo $sub['employee_id']; ?></span>
+                                            <span class="badge bg-light text-dark border"><?php echo htmlspecialchars($sub['employee_id'] ?? ''); ?></span>
                                         </div>
                                     </div>
                                 </div>
                                 
                                 <div class="sub-desc">
-                                    <?php echo nl2br(htmlspecialchars($sub['description'])); ?>
+                                    <?php echo nl2br(htmlspecialchars($sub['description'] ?? '')); ?>
                                 </div>
 
                                 <div class="d-flex flex-wrap align-items-center gap-3 mt-3">
-                                    <?php if ($sub['file_path']): ?>
-                                        <a href="../<?php echo $sub['file_path']; ?>" target="_blank" class="file-link">
-                                            <i class="fa-solid fa-paperclip"></i> <?php echo $sub['file_name']; ?>
+                                    <?php if (!empty($sub['file_path'])): ?>
+                                        <a href="../<?php echo htmlspecialchars($sub['file_path']); ?>" target="_blank" class="file-link">
+                                            <i class="fa-solid fa-paperclip"></i> <?php echo htmlspecialchars($sub['file_name'] ?? 'Attachment'); ?>
                                         </a>
                                     <?php endif; ?>
                                     
-                                    <span class="status-badge status-<?php echo $sub['status']; ?>">
-                                        <?php if($sub['status'] == 'pending'): ?><i class="fa-regular fa-clock"></i><?php endif; ?>
-                                        <?php if($sub['status'] == 'reviewed'): ?><i class="fa-solid fa-eye"></i><?php endif; ?>
-                                        <?php if($sub['status'] == 'approved'): ?><i class="fa-solid fa-check"></i><?php endif; ?>
-                                        <?php if($sub['status'] == 'rejected'): ?><i class="fa-solid fa-xmark"></i><?php endif; ?>
-                                        <?php echo ucfirst($sub['status']); ?>
+                                    <span class="status-badge status-<?php echo $sub['status'] ?? 'pending'; ?>">
+                                        <?php if(($sub['status'] ?? '') == 'pending'): ?><i class="fa-regular fa-clock"></i><?php endif; ?>
+                                        <?php if(($sub['status'] ?? '') == 'reviewed'): ?><i class="fa-solid fa-eye"></i><?php endif; ?>
+                                        <?php if(($sub['status'] ?? '') == 'approved'): ?><i class="fa-solid fa-check"></i><?php endif; ?>
+                                        <?php if(($sub['status'] ?? '') == 'rejected'): ?><i class="fa-solid fa-xmark"></i><?php endif; ?>
+                                        <?php echo ucfirst($sub['status'] ?? 'pending'); ?>
                                     </span>
                                     
                                     <span class="text-muted" style="font-size: 12px;">
@@ -308,10 +308,10 @@ $submissions = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                             <div class="flex-grow-1">
                                                 <label class="form-label text-muted fw-bold mb-1" style="font-size:11px;">STATUS</label>
                                                 <select class="form-select" name="status">
-                                                    <option value="pending" <?php echo $sub['status'] == 'pending' ? 'selected' : ''; ?>>⏳ Pending</option>
-                                                    <option value="reviewed" <?php echo $sub['status'] == 'reviewed' ? 'selected' : ''; ?>>📝 Reviewed</option>
-                                                    <option value="approved" <?php echo $sub['status'] == 'approved' ? 'selected' : ''; ?>>✅ Approved</option>
-                                                    <option value="rejected" <?php echo $sub['status'] == 'rejected' ? 'selected' : ''; ?>>❌ Rejected</option>
+                                                    <option value="pending" <?php echo ($sub['status'] ?? '') == 'pending' ? 'selected' : ''; ?>>⏳ Pending</option>
+                                                    <option value="reviewed" <?php echo ($sub['status'] ?? '') == 'reviewed' ? 'selected' : ''; ?>>📝 Reviewed</option>
+                                                    <option value="approved" <?php echo ($sub['status'] ?? '') == 'approved' ? 'selected' : ''; ?>>✅ Approved</option>
+                                                    <option value="rejected" <?php echo ($sub['status'] ?? '') == 'rejected' ? 'selected' : ''; ?>>❌ Rejected</option>
                                                 </select>
                                             </div>
                                             <div class="d-flex align-items-end" style="width: 100px;">
@@ -323,10 +323,11 @@ $submissions = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
                                         <div>
                                             <label class="form-label text-muted fw-bold mb-1" style="font-size:11px;">HR FEEDBACK</label>
-                                            <textarea class="form-control" name="feedback" rows="2" placeholder="Write feedback for the employee..."><?php echo htmlspecialchars($sub['feedback']); ?></textarea>
+                                            <!-- এখানে ?? '' যোগ করা হয়েছে যাতে null এরর না আসে -->
+                                            <textarea class="form-control" name="feedback" rows="2" placeholder="Write feedback for the employee..."><?php echo htmlspecialchars($sub['feedback'] ?? ''); ?></textarea>
                                         </div>
                                         
-                                        <?php if ($sub['feedback']): ?>
+                                        <?php if (!empty($sub['feedback'])): ?>
                                             <div class="mt-2 text-success" style="font-size: 12px;">
                                                 <i class="fa-solid fa-circle-check me-1"></i> Feedback provided
                                             </div>
