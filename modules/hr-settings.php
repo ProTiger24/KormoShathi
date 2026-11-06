@@ -566,6 +566,7 @@ $profileImage = $isUrl ? $pic : ($isLocal ? '../' . trim($pic, '/') : '');
     <script>
         let notificationModal = null;
         let roleModalInstance = null;
+        let isUploading = false; // 🟢 ছবি আপলোড ট্র্যাক করার জন্য নতুন ভেরিয়েবল
 
         function toggleSidebar() {
             document.getElementById('sidebar').classList.toggle('active');
@@ -649,26 +650,51 @@ $profileImage = $isUrl ? $pic : ($isLocal ? '../' . trim($pic, '/') : '');
             document.getElementById(tabId).classList.add('active');
         }
 
-        // 1. ছবি আপলোড (🟢 এখানে Cloudinary API লিংকটি সেট করা হয়েছে)
+        // 1. ছবি আপলোড (🟢 Cloudinary API লিংক সেট করা হলো এবং isUploading স্টেট যুক্ত করা হলো)
         document.getElementById('profile_pic_input')?.addEventListener('change', async function(e) {
             if (e.target.files.length > 0) {
                 const file = e.target.files[0];
+                const originalPreview = document.getElementById('profilePicPreview').innerHTML;
+                
+                // লোকাল প্রিভিউ দেখানো
                 const reader = new FileReader();
                 reader.onload = function(event) {
                     document.getElementById('profilePicPreview').innerHTML = `<img src="${event.target.result}" style="width:100%; height:100%; object-fit:cover;">`;
-                    document.querySelector('.avatar').innerHTML = `<img src="${event.target.result}" style="width:100%; height:100%; border-radius:50%; object-fit:cover;">`;
                 }
                 reader.readAsDataURL(file);
 
                 const formData = new FormData();
                 formData.append('profile_pic', file);
 
+                isUploading = true;
                 try {
-                    // 🟢 upload-profile-pic.php এর বদলে upload-profile.php ব্যবহার করা হলো
                     const res = await fetch('../api/upload-profile.php', { method: 'POST', body: formData });
                     const result = await res.json();
-                    if (!result.success) alert('Error: ' + result.message);
-                } catch (err) { alert('Server error while uploading picture.'); }
+                    
+                    if (result.success) {
+                        // সফল হলে Cloudinary-র আসল লিংকটি দিয়ে ছবি আপডেট করা
+                        document.getElementById('profilePicPreview').innerHTML = `<img src="${result.image_path}" style="width:100%; height:100%; object-fit:cover;">`;
+                        
+                        const topAvatar = document.querySelector('.profile-button .avatar');
+                        if (topAvatar) {
+                            if (topAvatar.tagName === 'IMG') {
+                                topAvatar.src = result.image_path;
+                            } else {
+                                topAvatar.outerHTML = `<img src="${result.image_path}" class="avatar" alt="Profile">`;
+                            }
+                        }
+                        alert('✅ Profile picture uploaded successfully!');
+                    } else {
+                        // ব্যর্থ হলে আগের ছবি ফিরিয়ে আনা
+                        document.getElementById('profilePicPreview').innerHTML = originalPreview;
+                        alert('✗ Upload Error: ' + result.message);
+                    }
+                } catch (err) { 
+                    document.getElementById('profilePicPreview').innerHTML = originalPreview;
+                    alert('Server error while uploading picture.'); 
+                } finally {
+                    isUploading = false;
+                }
             }
         });
 
@@ -710,6 +736,13 @@ $profileImage = $isUrl ? $pic : ($isLocal ? '../' . trim($pic, '/') : '');
         // 3. প্রোফাইল ফর্ম সাবমিট
         document.getElementById('profileForm')?.addEventListener('submit', async function(e) {
             e.preventDefault();
+            
+            // 🟢 ছবি আপলোড চলাকালীন সেভ বাটন চাপলে বাধা দেওয়া হচ্ছে
+            if (isUploading) {
+                alert('Please wait for the profile picture to finish uploading.');
+                return;
+            }
+
             const btn = this.querySelector('button[type="submit"]');
             const originalText = btn.innerHTML;
             btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>Saving...'; btn.disabled = true;
@@ -728,7 +761,7 @@ $profileImage = $isUrl ? $pic : ($isLocal ? '../' . trim($pic, '/') : '');
             }
         });
 
-        // 4. পাসওয়ার্ড ফর্ম সাবমিট
+        // 4. পাসওয়ার্ড ফর্ম সাবমিট
         document.getElementById('passwordForm')?.addEventListener('submit', async function(e) {
             e.preventDefault();
             const form = this;
