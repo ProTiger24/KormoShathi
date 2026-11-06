@@ -26,7 +26,7 @@ $action = $input['action'];
 
 try {
     if ($action === 'update_profile') {
-        // ?? '' ব্যবহার করা হলো যাতে ফিল্ড না থাকলেও এরর না আসে
+        // টেক্সট ফিল্ডগুলো নেওয়া
         $first_name = trim($input['first_name'] ?? '');
         $last_name  = trim($input['last_name'] ?? '');
         $email      = trim($input['email'] ?? '');
@@ -35,14 +35,17 @@ try {
         $address = trim($input['address'] ?? '');
         $emergency_contact = trim($input['emergency_contact'] ?? '');
         $blood_group = trim($input['blood_group'] ?? '');
-        $date_of_birth = trim($input['date_of_birth'] ?? '');
+        
+        // 🟢 ডেট অফ বার্থ হ্যান্ডেল করা (খালি থাকলে NULL হবে, নাহলে সঠিক ডেট)
+        $dob_input = trim($input['date_of_birth'] ?? '');
+        $date_of_birth = !empty($dob_input) ? $dob_input : null;
 
         if (empty($first_name) || empty($email)) {
             echo json_encode(['success' => false, 'message' => 'First Name and Email are required']);
             exit;
         }
 
-        // ডাটাবেসে আপডেট (আপনার ডাটাবেসে এই কলামগুলো থাকলে কাজ করবে)
+        // ডাটাবেসে আপডেট
         $stmt = $db->prepare("UPDATE users SET first_name=?, last_name=?, email=?, phone=?, address=?, emergency_contact=?, blood_group=?, date_of_birth=? WHERE id=?");
         $stmt->execute([$first_name, $last_name, $email, $phone, $address, $emergency_contact, $blood_group, $date_of_birth, $user_id]);
 
