@@ -491,10 +491,22 @@ if (!$config) {
             const resumeBox = document.getElementById('rv_resume_text');
             const pdfContainer = document.getElementById('pdf_download_container');
             const pdfLink = document.getElementById('rv_pdf_link');
+            
             if (resumeText) { resumeBox.textContent = resumeText; } 
             else { resumeBox.innerHTML = '<span class="text-warning"><i class="fa-solid fa-triangle-exclamation me-1"></i> No resume text saved.</span>'; }
-            if (candidate.resume_path) { pdfLink.href = '../' + candidate.resume_path; pdfContainer.style.display = 'block'; } 
-            else { pdfContainer.style.display = 'none'; }
+            
+            // 🟢 Cloudinary URL হ্যান্ডেল করার সঠিক লজিক
+            if (candidate.resume_path) { 
+                let resumeUrl = candidate.resume_path;
+                if (!resumeUrl.startsWith('http://') && !resumeUrl.startsWith('https://')) {
+                    resumeUrl = '../' + resumeUrl; // লোকাল ফাইল হলে
+                }
+                pdfLink.href = resumeUrl; 
+                pdfContainer.style.display = 'block'; 
+            } else { 
+                pdfContainer.style.display = 'none'; 
+            }
+
             document.getElementById('reject_section').style.display = 'none';
             document.getElementById('btn_toggle_reject').style.display = 'block';
             document.getElementById('btn_confirm_reject').style.display = 'none';
