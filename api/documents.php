@@ -6,13 +6,7 @@ session_start();
 require_once '../config/database.php';
 
 if (!isset($_SESSION['user_id'])) {
-    echo json_encode([
-        'success' => false,
-        'message' => 'Unauthorized',
-        'debug_keys' => array_keys($_SESSION),
-        'sid' => session_id(),
-        'file_version' => 'cloudinary-v3'
-    ]);
+    echo json_encode(['success' => false, 'message' => 'Unauthorized']);
     exit;
 }
 
@@ -20,6 +14,7 @@ $db = (new Database())->getConnection();
 $user_id = $_SESSION['user_id'];
 $method = $_SERVER['REQUEST_METHOD'];
 
+// 🟢 Cloudinary আপলোড ফাংশন
 function uploadToCloudinary($file_tmp_path, $public_id) {
     $cloud_url = getenv('CLOUDINARY_URL');
     if (!$cloud_url) {
@@ -70,6 +65,50 @@ function uploadToCloudinary($file_tmp_path, $public_id) {
     }
 }
 
+// 🟢 Cloudinary থেকে ফাইল ডিলিট করার ফাংশন
+function deleteFromCloudinary($file_url) {
+    $cloud_url = getenv('CLOUDINARY_URL');
+    if (!$cloud_url) return false;
+    
+    preg_match('/cloudinary:\/\/(.*):(.*)@(.*)/', $cloud_url, $matches);
+    $api_key = $matches[1] ?? ''; $api_secret = $matches[2] ?? ''; $cloud_name = $matches[3] ?? '';
+
+    // URL থেকে public_id বের করা (যেমন: kormoshathi/documents/6_xxx)
+    $parts = explode('/upload/', $file_url);
+    if (count($parts) < 2) return false;
+    
+    $path_with_version = $parts[1]; 
+    $path_parts = explode('/', $path_with_version);
+    // ভার্সন (v123456) বাদ দেওয়া
+    if (strpos($path_parts[0], 'v') === 0) { array_shift($path_parts); }
+    
+    $path_with_ext = implode('/', $path_parts);
+    // এক্সটেনশন বাদ দেওয়া
+    $public_id = preg_replace('/\.[^.]+$/', '', $path_with_ext);
+
+    $timestamp = time();
+    $params_to_sign = "public_id=$public_id&timestamp=$timestamp";
+    $signature = sha1($params_to_sign . $api_secret);
+
+    $url = "https://api.cloudinary.com/v1_1/$cloud_name/image/destroy";
+    $post_data = [
+        'public_id' => $public_id,
+        'api_key' => $api_key,
+        'timestamp' => $timestamp,
+        'signature' => $signature
+    ];
+
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $post_data);
+    $response = curl_exec($ch);
+    curl_close($ch);
+    
+    return true; 
+}
+
+// 🟢 GET: ডকুমেন্ট লিস্ট
 if ($method == 'GET') {
     $stmt = $db->prepare("SELECT * FROM documents WHERE employee_id = ? ORDER BY upload_date DESC");
     $stmt->execute([$user_id]);
@@ -77,6 +116,7 @@ if ($method == 'GET') {
     exit;
 }
 
+// 🟢 POST: নতুন ফাইল আপলোড
 if ($method == 'POST') {
     if (isset($_FILES['file']) && $_FILES['file']['error'] === UPLOAD_ERR_OK) {
         $fileTmpPath = $_FILES['file']['tmp_name'];
@@ -88,12 +128,13 @@ if ($method == 'POST') {
         $allowedfileExtensions = array('jpg', 'jpeg', 'png', 'gif', 'pdf', 'doc', 'docx');
         
         if (in_array($fileExtension, $allowedfileExtensions)) {
-            if ($fileSize < 5000000) {
+            if ($fileSize < 5000000) { // 5MB limit
+                
                 $public_id = 'kormoshathi/documents/' . $user_id . '_' . uniqid() . '_' . time();
                 $upload_result = uploadToCloudinary($fileTmpPath, $public_id);
 
                 if (isset($upload_result['success'])) {
-                    $dbPath = $upload_result['url'];
+                    $dbPath = $upload_result['url']; 
                     $docType = $_POST['doc_type'] ?? 'Personal';
                     
                     $stmt = $db->prepare("INSERT INTO documents (employee_id, doc_name, file_path, doc_type) VALUES (?, ?, ?, ?)");
@@ -117,6 +158,7 @@ if ($method == 'POST') {
     exit;
 }
 
+// 🟢 DELETE: ফাইল ডিলিট করা
 if ($method == 'DELETE') {
     $id = $_GET['id'] ?? 0;
     if(!$id) {
@@ -129,13 +171,19 @@ if ($method == 'DELETE') {
     $doc = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if ($doc) {
-        if (strpos($doc['file_path'], 'http') !== 0) {
+        // 🟢 যদি Cloudinary ফাইল হয়, তবে Cloudinary থেকেও ডিলিট করবে
+        if (strpos($doc['file_path'], 'http') === 0) {
+            deleteFromCloudinary($doc['file_path']);
+        } 
+        // যদি লোকাল ফাইল হয়
+        else {
             $filePath = '../' . $doc['file_path'];
             if (file_exists($filePath) && is_file($filePath)) {
                 unlink($filePath);
             }
         }
         
+        // ডাটাবেস থেকে ডিলিট
         $stmt = $db->prepare("DELETE FROM documents WHERE id = ? AND employee_id = ?");
         if($stmt->execute([$id, $user_id])) {
             echo json_encode(['success' => true, 'message' => 'Document deleted successfully!']);
