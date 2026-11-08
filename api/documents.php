@@ -1,11 +1,18 @@
-
 <?php
 header("Content-Type: application/json; charset=UTF-8");
+// সেশন শুরু করার আগে নিশ্চিত করুন কোনো হোয়াইটস্পেস বা echo নেই
 session_start();
 require_once '../config/database.php';
 
+// 🟢 ডিবাগ চেক (সেশন এবং ফাইল ভার্সন দেখার জন্য)
 if (!isset($_SESSION['user_id'])) {
-    echo json_encode(['success' => false, 'message' => 'Unauthorized']);
+    echo json_encode([
+        'success' => false,
+        'message' => 'Unauthorized',
+        'debug_keys' => array_keys($_SESSION),
+        'sid' => session_id(),
+        'file_version' => 'cloudinary-v3'
+    ]);
     exit;
 }
 
