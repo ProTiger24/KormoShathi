@@ -230,7 +230,7 @@ $profileImage = $isUrl ? $pic : ($isLocal ? '../' . trim($pic, '/') : '');
                 <button class="nav-link" onclick="switchTab(event, 'attendance')"><i class="fa-solid fa-fingerprint"></i> Attendance Prefs</button>
                 <button class="nav-link" onclick="switchTab(event, 'leave')"><i class="fa-regular fa-calendar-check"></i> Leave Prefs</button>
                 <button class="nav-link" onclick="switchTab(event, 'appearance')"><i class="fa-solid fa-sliders"></i> Appearance</button>
-                <button class="nav-link" onclick="switchTab(event, 'documents')"><i class="fa-regular fa-folder-open"></i> My Documents</button>
+                <!-- My Documents Button Removed -->
             </div>
 
             <!-- Settings Content -->
@@ -381,45 +381,8 @@ $profileImage = $isUrl ? $pic : ($isLocal ? '../' . trim($pic, '/') : '');
                     </div>
                 </div>
 
-                <!-- ৭. My Documents -->
-                <div id="documents" class="settings-section">
-                    <h2 class="section-title">My Documents</h2>
-                    <p class="section-desc">Upload, view, and manage your official or personal documents safely.</p>
-                    
-                    <div class="card-box mb-4 bg-light border-primary" style="border-style: dashed;">
-                        <h6 class="fw-bold mb-3"><i class="fa-solid fa-cloud-arrow-up text-primary me-2"></i>Upload New Document</h6>
-                        <form id="uploadDocForm" class="row g-3 align-items-end">
-                            <div class="col-md-5">
-                                <label class="form-label">Select File (PDF, DOC, JPG, PNG)</label>
-                                <input type="file" class="form-control" name="document" required>
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label">Document Type</label>
-                                <select class="form-select" name="document_type">
-                                    <option value="Personal">Personal</option>
-                                    <option value="Official">Official</option>
-                                </select>
-                            </div>
-                            <div class="col-md-3">
-                                <button type="submit" class="btn-save w-100"><i class="fa-solid fa-upload me-2"></i>Upload</button>
-                            </div>
-                        </form>
-                    </div>
-
-                    <div class="card-box">
-                        <div class="card-box-title"><i class="fa-regular fa-file-lines text-primary"></i> Saved Documents</div>
-                        <div class="table-responsive">
-                            <table class="table table-hover align-middle">
-                                <thead class="bg-light">
-                                    <tr><th>File Name</th><th>Type</th><th>Uploaded</th><th class="text-end">Action</th></tr>
-                                </thead>
-                                <tbody id="documentsTableBody">
-                                    <tr><td colspan="4" class="text-center py-3"><i class="fa-solid fa-spinner fa-spin"></i> Loading documents...</td></tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
+                <!-- ৭. My Documents (REMOVED) -->
+                
             </div>
         </div>
     </main>
@@ -454,7 +417,7 @@ $profileImage = $isUrl ? $pic : ($isLocal ? '../' . trim($pic, '/') : '');
             document.querySelectorAll('.settings-section').forEach(el => el.classList.remove('active'));
             event.currentTarget.classList.add('active');
             document.getElementById(tabId).classList.add('active');
-            if(tabId === 'documents') loadDocuments();
+            // Removed: if(tabId === 'documents') loadDocuments();
         }
 
         // ==========================================
@@ -597,65 +560,6 @@ $profileImage = $isUrl ? $pic : ($isLocal ? '../' . trim($pic, '/') : '');
             } catch (e) { console.error('Error saving settings', e); }
         }
         document.querySelectorAll('.setting-toggle, .setting-select').forEach(el => { el.addEventListener('change', saveSettings); });
-
-        document.getElementById('uploadDocForm')?.addEventListener('submit', async function(e) {
-            e.preventDefault();
-            const btn = this.querySelector('button[type="submit"]');
-            const originalText = btn.innerHTML;
-            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Uploading...'; btn.disabled = true;
-
-            const formData = new FormData(this);
-            try {
-                const res = await fetch('../api/employee-documents.php', { method: 'POST', body: formData });
-                const result = await res.json();
-                alert(result.message);
-                if(result.success) {
-                    this.reset();
-                    loadDocuments();
-                }
-            } catch (err) { alert('Upload error.'); } finally {
-                btn.innerHTML = originalText; btn.disabled = false;
-            }
-        });
-
-        async function loadDocuments() {
-            const tbody = document.getElementById('documentsTableBody');
-            try {
-                const res = await fetch('../api/employee-documents.php');
-                const result = await res.json();
-                if(result.success) {
-                    if(result.data.length === 0) {
-                        tbody.innerHTML = `<tr><td colspan="4" class="text-center py-3 text-muted">No documents uploaded yet.</td></tr>`;
-                        return;
-                    }
-                    tbody.innerHTML = result.data.map(d => `
-                        <tr>
-                            <td class="fw-bold text-dark"><i class="fa-regular fa-file me-2 text-primary"></i>${escapeHTML(d.document_name)}</td>
-                            <td><span class="badge bg-light text-dark border">${d.document_type}</span></td>
-                            <td class="text-muted" style="font-size:12px;">${new Date(d.uploaded_at).toLocaleDateString()}</td>
-                            <td class="text-end">
-                                <a href="../${d.file_path}" target="_blank" class="btn btn-sm btn-outline-primary me-1" title="Download/View"><i class="fa-solid fa-download"></i></a>
-                                <button class="btn btn-sm btn-outline-danger" onclick="deleteDocument(${d.id})" title="Delete"><i class="fa-solid fa-trash"></i></button>
-                            </td>
-                        </tr>
-                    `).join('');
-                }
-            } catch(e) {
-                tbody.innerHTML = `<tr><td colspan="4" class="text-center text-danger">Failed to load documents.</td></tr>`;
-            }
-        }
-
-        async function deleteDocument(id) {
-            if(!confirm('Are you sure you want to permanently delete this document?')) return;
-            try {
-                const res = await fetch('../api/employee-documents.php', {
-                    method: 'DELETE', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ id })
-                });
-                const result = await res.json();
-                alert(result.message);
-                if(result.success) loadDocuments();
-            } catch(e) { alert('Error deleting document.'); }
-        }
 
         function logoutAllDevices() { if(confirm("Logout from all other devices?")) alert("Session invalidated."); }
 
