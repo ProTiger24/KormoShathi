@@ -13,9 +13,7 @@ $fullName = trim($firstName . ' ' . $lastName);
 $initials = strtoupper(substr($firstName, 0, 1) . substr($lastName, 0, 1));
 $pic = $_SESSION['profile_picture'] ?? ($user['profile_picture'] ?? '');
 $position = $_SESSION['position'] ?? ($user['position'] ?? 'Employee');
-$isUrl = !empty($pic) && (strpos($pic, 'http://') === 0 || strpos($pic, 'https://') === 0);
-$isLocal = !empty($pic) && !$isUrl && file_exists(__DIR__ . '/../' . $pic);
-$profileImage = $isUrl ? $pic : ($isLocal ? '/../' . trim($pic, '/') : '');
+$profileImage = img_url($pic);
 function e($value) { return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8'); }
 ?>
 <!DOCTYPE html>
@@ -378,9 +376,17 @@ function e($value) { return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8'
                     tbody.innerHTML = result.data.map(doc => {
                         const date = new Date(doc.upload_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
                         
+                        // 🟢 Cloudinary URL এবং লোকাল পাথ হ্যান্ডেল করার লজিক
+                        let fileUrl = doc.file_path;
+                        if (!fileUrl.startsWith('http://') && !fileUrl.startsWith('https://')) {
+                            fileUrl = '../' + fileUrl;
+                        }
+
+                        // 🟢 ফাইলের নামের এক্সটেনশন দিয়ে আইকন ঠিক করা (URL-এর শেষে প্যারামিটার থাকলেও সমস্যা হবে না)
+                        const docNameLower = (doc.doc_name || '').toLowerCase();
                         let iconClass = 'ic-doc'; let icon = 'fa-file-word';
-                        if(doc.file_path.endsWith('.pdf')) { iconClass = 'ic-pdf'; icon = 'fa-file-pdf'; }
-                        else if(doc.file_path.match(/\.(jpg|jpeg|png)$/i)) { iconClass = 'ic-img'; icon = 'fa-image'; }
+                        if(docNameLower.endsWith('.pdf')) { iconClass = 'ic-pdf'; icon = 'fa-file-pdf'; }
+                        else if(docNameLower.match(/\.(jpg|jpeg|png|gif)$/)) { iconClass = 'ic-img'; icon = 'fa-image'; }
 
                         return `
                             <tr>
@@ -394,8 +400,8 @@ function e($value) { return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8'
                                 <td>${date}</td>
                                 <td class="text-end">
                                     <div class="d-flex gap-1 justify-content-end">
-                                        <a href="../${doc.file_path}" target="_blank" class="btn-action-sm btn-view" title="View"><i class="fa-solid fa-eye"></i></a>
-                                        <a href="../${doc.file_path}" download="${doc.doc_name}" class="btn-action-sm btn-download" title="Download"><i class="fa-solid fa-download"></i></a>
+                                        <a href="${fileUrl}" target="_blank" class="btn-action-sm btn-view" title="View"><i class="fa-solid fa-eye"></i></a>
+                                        <a href="${fileUrl}" download="${doc.doc_name}" class="btn-action-sm btn-download" title="Download"><i class="fa-solid fa-download"></i></a>
                                         <button onclick="deleteDocument(${doc.id})" class="btn-action-sm btn-delete" title="Delete"><i class="fa-solid fa-trash"></i></button>
                                     </div>
                                 </td>
