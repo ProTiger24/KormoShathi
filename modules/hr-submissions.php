@@ -280,7 +280,7 @@ $submissions = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
                                 <div class="d-flex flex-wrap align-items-center gap-3 mt-3">
                                     <?php if (!empty($sub['file_path'])): ?>
-                                        <a href="../<?php echo htmlspecialchars($sub['file_path']); ?>" target="_blank" class="file-link">
+                                        <a href="<?php echo htmlspecialchars(img_url($sub['file_path'])); ?>" target="_blank" class="file-link">
                                             <i class="fa-solid fa-paperclip"></i> <?php echo htmlspecialchars($sub['file_name'] ?? 'Attachment'); ?>
                                         </a>
                                     <?php endif; ?>

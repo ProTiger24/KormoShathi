@@ -503,7 +503,7 @@ function e($value) { return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8'
                                     <div class="d-flex justify-content-between align-items-start mb-2">
                                         <h6 class="fw-bold mb-0 text-dark fs-5"><?php echo htmlspecialchars($sub['title']); ?></h6>
                                         <?php if ($sub['file_path']): ?>
-                                            <a href="../<?php echo htmlspecialchars($sub['file_path']); ?>" target="_blank" class="btn btn-sm btn-outline-primary fw-bold" style="border-radius: 6px;">
+                                            <a href="<?php echo htmlspecialchars(img_url($sub['file_path'])); ?>" target="_blank" class="btn btn-sm btn-outline-primary fw-bold" style="border-radius: 6px;">
                                                 <i class="fa-solid fa-download me-1"></i> View File
                                             </a>
                                         <?php endif; ?>
