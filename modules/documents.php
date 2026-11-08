@@ -285,7 +285,7 @@ function e($value) { return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8'
         // ==========================================
         async function loadNotificationCount() {
             try {
-                const response = await fetch('../api/notifications.php?count=1');
+                const response = await fetch('../api/notifications.php?count=1', { credentials: 'same-origin' });
                 const data = await response.json();
                 const badge = document.getElementById('noticeBadge');
                 const unread = Number(data.unread) || 0;
@@ -304,7 +304,7 @@ function e($value) { return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8'
             const container = document.getElementById('notificationList');
             container.innerHTML = `<div class="text-center py-4"><i class="fa-solid fa-spinner fa-spin"></i></div>`;
             try {
-                const response = await fetch('../api/notifications.php');
+                const response = await fetch('../api/notifications.php', { credentials: 'same-origin' });
                 const result = await response.json();
                 const notifs = result.data || [];
                 if (notifs.length === 0) { container.innerHTML = `<div class="text-center py-5 text-muted"><i class="fa-regular fa-bell-slash fs-1 mb-3"></i><h6 class="fw-bold">All caught up!</h6></div>`; return; }
@@ -319,14 +319,14 @@ function e($value) { return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8'
 
         async function markAsRead(id) {
             try {
-                await fetch('../api/notifications.php', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
+                await fetch('../api/notifications.php', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }), credentials: 'same-origin' });
                 await loadNotifications(); await loadNotificationCount();
             } catch (error) {}
         }
 
         async function markAllAsReadAndClose() {
             try {
-                await fetch('../api/notifications.php', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: 0 }) });
+                await fetch('../api/notifications.php', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: 0 }), credentials: 'same-origin' });
                 await loadNotifications(); await loadNotificationCount(); 
                 if (notificationModal) notificationModal.hide();
             } catch (error) {}
@@ -355,7 +355,8 @@ function e($value) { return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8'
             btn.disabled = true;
 
             try {
-                const res = await fetch('../api/documents.php', { method: 'POST', body: formData });
+                // 🟢 credentials: 'same-origin' যুক্ত করা হলো
+                const res = await fetch('../api/documents.php', { method: 'POST', body: formData, credentials: 'same-origin' });
                 const result = await res.json();
                 if(result.success) {
                     alert('File uploaded successfully!');
@@ -369,20 +370,18 @@ function e($value) { return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8'
         async function loadDocuments() {
             const tbody = document.getElementById('documentList');
             try {
-                const res = await fetch('../api/documents.php?v=2.0');
+                const res = await fetch('../api/documents.php?v=2.0', { credentials: 'same-origin' });
                 const result = await res.json();
 
                 if(result.success && result.data.length > 0) {
                     tbody.innerHTML = result.data.map(doc => {
                         const date = new Date(doc.upload_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
                         
-                        // 🟢 Cloudinary URL এবং লোকাল পাথ হ্যান্ডেল করার লজিক
                         let fileUrl = doc.file_path;
                         if (!fileUrl.startsWith('http://') && !fileUrl.startsWith('https://')) {
                             fileUrl = '../' + fileUrl;
                         }
 
-                        // 🟢 ফাইলের নামের এক্সটেনশন দিয়ে আইকন ঠিক করা (URL-এর শেষে প্যারামিটার থাকলেও সমস্যা হবে না)
                         const docNameLower = (doc.doc_name || '').toLowerCase();
                         let iconClass = 'ic-doc'; let icon = 'fa-file-word';
                         if(docNameLower.endsWith('.pdf')) { iconClass = 'ic-pdf'; icon = 'fa-file-pdf'; }
@@ -420,7 +419,8 @@ function e($value) { return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8'
             if(!confirm('Are you sure you want to delete this document? This action cannot be undone.')) return;
             
             try {
-                const res = await fetch(`../api/documents.php?id=${id}`, { method: 'DELETE' });
+                // 🟢 credentials: 'same-origin' যুক্ত করা হলো
+                const res = await fetch(`../api/documents.php?id=${id}`, { method: 'DELETE', credentials: 'same-origin' });
                 const result = await res.json();
                 
                 if(result.success) {
