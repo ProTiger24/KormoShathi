@@ -1,3 +1,4 @@
+
 <?php
 header("Content-Type: application/json; charset=UTF-8");
 session_start();
@@ -11,6 +12,57 @@ if (!isset($_SESSION['user_id'])) {
 $db = (new Database())->getConnection();
 $user_id = $_SESSION['user_id'];
 $method = $_SERVER['REQUEST_METHOD'];
+
+// 🟢 Cloudinary আপলোড ফাংশন
+function uploadToCloudinary($file_tmp_path, $public_id) {
+    $cloud_url = getenv('CLOUDINARY_URL');
+    if (!$cloud_url) {
+        $env_path = __DIR__ . '/../.env';
+        if (file_exists($env_path)) {
+            $lines = file($env_path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+            foreach ($lines as $line) {
+                if (strpos(trim($line), 'CLOUDINARY_URL=') === 0) {
+                    $cloud_url = trim(explode('=', $line, 2)[1] ?? '', " \"'");
+                    break;
+                }
+            }
+        }
+    }
+    if (!$cloud_url) return ['error' => 'CLOUDINARY_URL not configured'];
+    
+    preg_match('/cloudinary:\/\/(.*):(.*)@(.*)/', $cloud_url, $matches);
+    $api_key = $matches[1] ?? ''; $api_secret = $matches[2] ?? ''; $cloud_name = $matches[3] ?? '';
+    if (!$api_key || !$api_secret || !$cloud_name) return ['error' => 'Invalid CLOUDINARY_URL format'];
+
+    $timestamp = time();
+    $params_to_sign = "public_id=$public_id&timestamp=$timestamp";
+    $signature = sha1($params_to_sign . $api_secret);
+
+    $url = "https://api.cloudinary.com/v1_1/$cloud_name/auto/upload";
+    $post_data = [
+        'file' => new CURLFile($file_tmp_path),
+        'api_key' => $api_key,
+        'timestamp' => $timestamp,
+        'public_id' => $public_id,
+        'signature' => $signature
+    ];
+
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $post_data);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    $result = json_decode($response, true);
+    if ($httpCode == 200 && isset($result['secure_url'])) {
+        return ['success' => true, 'url' => $result['secure_url']];
+    } else {
+        return ['error' => $result['error']['message'] ?? 'Upload failed'];
+    }
+}
 
 // 🟢 GET: ডকুমেন্ট লিস্ট
 if ($method == 'GET') {
@@ -29,17 +81,18 @@ if ($method == 'POST') {
         $fileNameCmps = explode(".", $fileName);
         $fileExtension = strtolower(end($fileNameCmps));
 
-        $allowedfileExtensions = array('jpg', 'gif', 'png', 'pdf', 'doc', 'docx');
+        $allowedfileExtensions = array('jpg', 'jpeg', 'png', 'gif', 'pdf', 'doc', 'docx');
         
         if (in_array($fileExtension, $allowedfileExtensions)) {
             if ($fileSize < 5000000) { // 5MB limit
-                $newFileName = uniqid() . '_' . time() . '.' . $fileExtension;
-                $uploadFileDir = '../uploads/documents/';
-                $dest_path = $uploadFileDir . $newFileName;
+                
+                // 🟢 Cloudinary আপলোড
+                $public_id = 'kormoshathi/documents/' . $user_id . '_' . uniqid() . '_' . time();
+                $upload_result = uploadToCloudinary($fileTmpPath, $public_id);
 
-                if(move_uploaded_file($fileTmpPath, $dest_path)) {
+                if (isset($upload_result['success'])) {
+                    $dbPath = $upload_result['url']; // Cloudinary URL
                     $docType = $_POST['doc_type'] ?? 'Personal';
-                    $dbPath = 'uploads/documents/' . $newFileName;
                     
                     $stmt = $db->prepare("INSERT INTO documents (employee_id, doc_name, file_path, doc_type) VALUES (?, ?, ?, ?)");
                     if ($stmt->execute([$user_id, $fileName, $dbPath, $docType])) {
@@ -48,7 +101,7 @@ if ($method == 'POST') {
                         echo json_encode(['success' => false, 'message' => 'Database error.']);
                     }
                 } else {
-                    echo json_encode(['success' => false, 'message' => 'Error moving the file.']);
+                    echo json_encode(['success' => false, 'message' => 'Cloudinary Error: ' . $upload_result['error']]);
                 }
             } else {
                 echo json_encode(['success' => false, 'message' => 'File size must be less than 5MB.']);
@@ -70,19 +123,19 @@ if ($method == 'DELETE') {
         exit;
     }
 
-    // ফাইলের পাথ বের করা (ফোল্ডার থেকে ডিলিট করার জন্য)
     $stmt = $db->prepare("SELECT file_path FROM documents WHERE id = ? AND employee_id = ?");
     $stmt->execute([$id, $user_id]);
     $doc = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if ($doc) {
-        $filePath = '../' . $doc['file_path'];
-        // সার্ভার থেকে ফাইল ডিলিট
-        if (file_exists($filePath) && is_file($filePath)) {
-            unlink($filePath);
+        // 🟢 যদি লোকাল ফাইল হয় (পুরনো ডেটা), তবে সার্ভার থেকে ডিলিট করবে
+        if (strpos($doc['file_path'], 'http') !== 0) {
+            $filePath = '../' . $doc['file_path'];
+            if (file_exists($filePath) && is_file($filePath)) {
+                unlink($filePath);
+            }
         }
         
-        // ডাটাবেস থেকে ডিলিট
         $stmt = $db->prepare("DELETE FROM documents WHERE id = ? AND employee_id = ?");
         if($stmt->execute([$id, $user_id])) {
             echo json_encode(['success' => true, 'message' => 'Document deleted successfully!']);
