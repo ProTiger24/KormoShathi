@@ -1,10 +1,10 @@
 <?php
+header("Access-Control-Allow-Origin: *");
+header("Access-Control-Allow-Credentials: true");
 header("Content-Type: application/json; charset=UTF-8");
-// সেশন শুরু করার আগে নিশ্চিত করুন কোনো হোয়াইটস্পেস বা echo নেই
 session_start();
 require_once '../config/database.php';
 
-// 🟢 ডিবাগ চেক (সেশন এবং ফাইল ভার্সন দেখার জন্য)
 if (!isset($_SESSION['user_id'])) {
     echo json_encode([
         'success' => false,
@@ -20,7 +20,6 @@ $db = (new Database())->getConnection();
 $user_id = $_SESSION['user_id'];
 $method = $_SERVER['REQUEST_METHOD'];
 
-// 🟢 Cloudinary আপলোড ফাংশন
 function uploadToCloudinary($file_tmp_path, $public_id) {
     $cloud_url = getenv('CLOUDINARY_URL');
     if (!$cloud_url) {
@@ -71,7 +70,6 @@ function uploadToCloudinary($file_tmp_path, $public_id) {
     }
 }
 
-// 🟢 GET: ডকুমেন্ট লিস্ট
 if ($method == 'GET') {
     $stmt = $db->prepare("SELECT * FROM documents WHERE employee_id = ? ORDER BY upload_date DESC");
     $stmt->execute([$user_id]);
@@ -79,7 +77,6 @@ if ($method == 'GET') {
     exit;
 }
 
-// 🟢 POST: নতুন ফাইল আপলোড
 if ($method == 'POST') {
     if (isset($_FILES['file']) && $_FILES['file']['error'] === UPLOAD_ERR_OK) {
         $fileTmpPath = $_FILES['file']['tmp_name'];
@@ -91,14 +88,12 @@ if ($method == 'POST') {
         $allowedfileExtensions = array('jpg', 'jpeg', 'png', 'gif', 'pdf', 'doc', 'docx');
         
         if (in_array($fileExtension, $allowedfileExtensions)) {
-            if ($fileSize < 5000000) { // 5MB limit
-                
-                // 🟢 Cloudinary আপলোড
+            if ($fileSize < 5000000) {
                 $public_id = 'kormoshathi/documents/' . $user_id . '_' . uniqid() . '_' . time();
                 $upload_result = uploadToCloudinary($fileTmpPath, $public_id);
 
                 if (isset($upload_result['success'])) {
-                    $dbPath = $upload_result['url']; // Cloudinary URL
+                    $dbPath = $upload_result['url'];
                     $docType = $_POST['doc_type'] ?? 'Personal';
                     
                     $stmt = $db->prepare("INSERT INTO documents (employee_id, doc_name, file_path, doc_type) VALUES (?, ?, ?, ?)");
@@ -122,7 +117,6 @@ if ($method == 'POST') {
     exit;
 }
 
-// 🟢 DELETE: ফাইল ডিলিট করা
 if ($method == 'DELETE') {
     $id = $_GET['id'] ?? 0;
     if(!$id) {
@@ -135,7 +129,6 @@ if ($method == 'DELETE') {
     $doc = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if ($doc) {
-        // 🟢 যদি লোকাল ফাইল হয় (পুরনো ডেটা), তবে সার্ভার থেকে ডিলিট করবে
         if (strpos($doc['file_path'], 'http') !== 0) {
             $filePath = '../' . $doc['file_path'];
             if (file_exists($filePath) && is_file($filePath)) {
